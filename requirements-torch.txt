@@ -1,0 +1,21 @@
+# PyTorch устанавливается отдельно из-за CUDA-индекса.
+#
+# СОВМЕСТИМОСТЬ:
+#   cu118 поддерживается только в torch 2.4–2.5 → требует Python <=3.12 на целевой машине.
+#   cu118-сборка torch работает на любом CUDA >= 11.8 (NVIDIA backward-compat).
+#   Python 3.13 + CUDA 11.8 — несовместимы: нужен минимум CUDA 12.4.
+#
+# ЦЕЛЕВАЯ МАШИНА (CUDA >= 11.8, Python 3.12):
+--index-url https://download.pytorch.org/whl/cu118
+torch>=2.4,<2.6
+torchvision>=0.19,<0.21
+
+# РАЗРАБОТКА на машине с CUDA 12.4+ (Python 3.13):
+# --index-url https://download.pytorch.org/whl/cu124
+# torch>=2.6
+# torchvision>=0.21
+
+# CPU-only (CI / быстрая проверка без GPU):
+# --index-url https://download.pytorch.org/whl/cpu
+# torch>=2.4,<2.6
+# torchvision>=0.19,<0.21

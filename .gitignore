@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+*.onnx
+*.engine
+*.pt
+runs/
+.env
+uv.lock
+skills-lock.json
+.agents/
+.claude/
