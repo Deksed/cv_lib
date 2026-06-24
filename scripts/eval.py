@@ -18,6 +18,9 @@ import argparse
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cv_lib.metrics import plot_confusion_matrix, summarize_map

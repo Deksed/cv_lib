@@ -17,6 +17,7 @@ dependencies = [
     "albumentations>=1.4",
     # data / config
     "pyyaml>=6.0",
+    "python-dotenv>=1.0",
     # metrics & plots
     "scikit-learn>=1.5",
     "matplotlib>=3.9",
