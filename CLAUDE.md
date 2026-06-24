@@ -9,19 +9,32 @@ CV utility library for iterating on object detection models. Core stack: **Ultra
 ```
 src/cv_lib/
 ├── viz/
-│   ├── __init__.py          # (empty — re-exports TBD)
-│   └── compare.py           # side-by-side GT vs prediction visualizer
+│   ├── __init__.py          # re-exports: compare_gt_pred, load_yolo_gt, show_batch, find_errors, render_errors
+│   ├── compare.py           # side-by-side GT vs prediction visualizer
+│   ├── batch.py             # show_batch() — image grid with YOLO box overlays
+│   └── errors.py            # find_errors() / render_errors() — FP/FN analysis
 ├── data/
-│   └── __init__.py          # YOLO format parsing, class distribution, iter pairs
+│   ├── __init__.py          # YOLO format parsing, class distribution, iter pairs
+│   ├── inspect.py           # dataset health check: corrupt images, missing labels, OOB boxes
+│   └── convert.py           # CVAT XML / COCO JSON → YOLO txt
 ├── metrics/
 │   └── __init__.py          # confusion matrix, mAP summary
+├── train/
+│   └── __init__.py          # train() wrapper: seeds + config snapshot + model.train()
 └── export.py                # ONNX / TensorRT export + validate
 scripts/
+├── eval.py                  # model.val() → mAP table + confusion matrix PNG
+├── batch_infer.py           # batch inference → YOLO labels and/or annotated images
 └── compare_gt_pred.py       # CLI wrapper over viz.compare
 tests/
-└── conftest.py              # pytest fixtures: sample_image, yolo_label_file
+├── conftest.py              # pytest fixtures: sample_image, yolo_label_file
+├── test_data_inspect.py
+├── test_data_convert.py
+├── test_viz_batch.py
+└── test_viz_errors.py
 configs/                     # YOLO data.yaml templates (currently empty)
-notebooks/                   # Jupyter experiments (currently empty)
+notebooks/                   # Jupyter experiments
+.env.example                 # env var template — copy to .env
 ```
 
 ## Setup
@@ -48,7 +61,7 @@ pip install -e ".[dev]"
 В `pyproject.toml` убрать ограничение `<3.13` из `requires-python`.
 
 Lint + format: `ruff check src/ scripts/` / `ruff format src/ scripts/`  
-Tests: `pytest`
+Tests: `uv run --extra dev pytest`
 
 ## Data & Annotations
 
@@ -56,12 +69,15 @@ Dataset root and annotation paths are **never hardcoded**. Always read from:
 - `DATA_ROOT` env var or a config parameter for the dataset directory
 - `CVAT_ANNOTATIONS_PATH` env var or config for CVAT export paths
 
+`.env` is loaded automatically by all scripts via `python-dotenv`. Copy `.env.example` → `.env`.
+
 Datasets follow **YOLO format** (`.yaml` config + `images/` + `labels/` structure). CVAT exports are typically in YOLO 1.1 or COCO JSON — check the format before parsing.
 
-Example pattern:
 ```python
+from dotenv import load_dotenv
+load_dotenv()
 import os
-data_root = os.environ["DATA_ROOT"]  # or cfg.data_root
+data_root = os.environ["DATA_ROOT"]
 ```
 
 ## Device
@@ -75,7 +91,7 @@ tensor = tensor.to(device)
 
 ## Reproducibility
 
-Training scripts must set seeds explicitly:
+Use `cv_lib.train.set_seeds(seed)` or set manually:
 ```python
 import random, numpy as np, torch
 random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
@@ -95,15 +111,12 @@ torch.backends.cudnn.benchmark = False
 
 ### cv_lib.viz.compare
 
-Existing functions:
-
 ```python
 compare_gt_pred(image_path, model_path, class_names,
                 conf_threshold=0.25, label_path=None,
                 output_path=None, show=True) -> np.ndarray
 ```
-Side-by-side GT (left) vs predictions (right). Auto-detects Jupyter vs terminal:
-notebook → `matplotlib`, terminal → `cv2.imshow`.
+Side-by-side GT (left) vs predictions (right). Auto-detects Jupyter vs terminal.
 Label auto-resolve: same dir first, then `images/ → labels/` swap.
 
 ```python
@@ -113,7 +126,31 @@ load_yolo_gt(label_path, img_w, img_h) -> tuple[np.ndarray, np.ndarray]
 
 Internal helpers (don't expose in public API): `_draw_boxes`, `_resolve_label_path`, `_add_panel_label`, `_in_notebook`.
 
-New viz modules to add: `viz/batch.py` (make_grid), `viz/distribution.py` (class bar chart), `viz/errors.py` (FP/FN analysis).
+### cv_lib.viz.batch
+
+```python
+show_batch(images, labels=None, class_names=None,
+           tile_size=(320,320), cols=4,
+           output_path=None, show=True) -> np.ndarray
+```
+- `images`: list of `np.ndarray` (H×W×C uint8 BGR), `torch.Tensor` (C×H×W float), or file paths
+- `labels`: list of `(N,5)` arrays — `[class_id, cx, cy, w, h]` YOLO normalised
+- Returns BGR grid; pads to full rows with black tiles
+
+### cv_lib.viz.errors
+
+```python
+find_errors(images_dir, labels_dir=None,
+            model_path=None, pred_labels_dir=None,
+            conf_threshold=0.25, iou_threshold=0.5) -> list[ErrorEntry]
+
+render_errors(entries, class_names=None,
+              tile_size=(320,320), cols=4, max_tiles=32,
+              output_path=None, show=True) -> np.ndarray
+```
+- Provide either `model_path` (live inference) or `pred_labels_dir` (pre-saved YOLO txts)
+- `ErrorEntry`: `image_path`, `error_type` ("FP"/"FN"), `box_xyxy`, `class_id`, `conf`
+- FP tiles drawn in red, FN in blue; cropped around the box with 30px padding
 
 ### cv_lib.data
 
@@ -125,10 +162,26 @@ class_distribution(labels_dir, num_classes) -> np.ndarray  # shape (num_classes,
 data_root() -> Path  # reads DATA_ROOT env var, raises EnvironmentError if unset
 ```
 
-`iter_image_label_pairs` auto-infers `labels_dir` by swapping `images` in the path.
-`label_path` in the returned pair may not exist (image has no annotation).
+### cv_lib.data.inspect
 
-To add: `data/inspect.py` (dataset health check, missing labels, corrupt images, bbox sanity), `data/convert.py` (CVAT XML / COCO JSON → YOLO txt).
+```python
+inspect_dataset(images_dir, labels_dir=None, num_classes=None,
+                class_names=None, extensions=...) -> InspectReport
+```
+- Checks: corrupt images (cv2.imread fails), missing label files, empty label files, invalid boxes
+- Invalid box = class id OOB, center outside [0,1], size outside (0,1]
+- Only fully valid boxes are counted in `class_counts`
+- `report.print()` renders an ASCII class distribution bar chart
+
+### cv_lib.data.convert
+
+```python
+cvat_xml_to_yolo(xml_path, out_dir, class_names=None) -> dict[str, int]
+coco_json_to_yolo(json_path, out_dir, class_names=None) -> dict[str, int]
+```
+- Both return `{class_name: index}` mapping
+- `class_names=None` → inferred from the file (CVAT labels / COCO categories)
+- Output: one `.txt` per image in YOLO normalised format
 
 ### cv_lib.metrics
 
@@ -138,7 +191,17 @@ summarize_map(results, class_names=None) -> dict[str, float]
 # keys: "mAP50", "mAP50-95", "AP50/<name>"
 ```
 
-`summarize_map` reads `results.box.map50`, `results.box.map`, `results.box.ap` from Ultralytics `model.val()` return value.
+`summarize_map` reads `results.box.map50`, `results.box.map`, `results.box.ap_class_index`, `results.box.ap` from Ultralytics `model.val()` return value.
+
+### cv_lib.train
+
+```python
+set_seeds(seed=42) -> None
+train(model_path, data, epochs=100, imgsz=640, batch=16, seed=42,
+      project="runs/train", name="exp", device=None, **kwargs) -> Results
+```
+- `set_seeds` sets `random`, `numpy`, `torch`, `cudnn.deterministic`
+- `train` saves `train_config.json` to `<project>/<name>/` before calling `model.train()`
 
 ### cv_lib.export
 
@@ -157,7 +220,6 @@ validate_export(pytorch_output, exported_output, atol=1e-4) -> None   # raises V
 - Draw on a **copy** of the image — never mutate the input (`img.copy()` first)
 - Return `np.ndarray` (BGR, uint8) from all viz functions — OpenCV-compatible
 - Accept both `np.ndarray` (H×W×C) and `torch.Tensor` (C×H×W float) — normalize internally
-- Batch grid: `torchvision.utils.make_grid` → `.permute(1,2,0).numpy()` → `plt.imshow`
 - Confusion matrix: `sklearn.metrics.ConfusionMatrixDisplay`
 
 ## Export
@@ -176,16 +238,10 @@ validate_export(pytorch_output, exported_output, atol=1e-4) -> None   # raises V
 - Ruff rules: `E`, `F`, `I`, `UP`; line length 100; `E501` ignored (warning only)
 - Notebooks exempt from `E402` / `F401`
 
-## Roadmap — What's Missing
+## What's Next
 
-Ordered by priority for the iteration loop:
-
-1. **`scripts/eval.py`** — run `model.val(data=yaml)`, print mAP table via `summarize_map`, save confusion matrix to file
-2. **`scripts/batch_infer.py`** — run model over a directory, save predictions as YOLO labels or visualized images
-3. **`data/inspect.py`** — find missing labels, corrupt images, out-of-bound boxes, print class imbalance report
-4. **`viz/batch.py`** — `show_batch(images, labels, class_names)` using `make_grid`; accepts both `np.ndarray` and `torch.Tensor`
-5. **`data/convert.py`** — CVAT XML / COCO JSON → YOLO `.txt` converter
-6. **`viz/errors.py`** — find and render false positives, false negatives, worst-confidence predictions
-7. **`train/__init__.py`** — thin wrapper over `model.train()` with seed setup and config save
+- `viz/distribution.py` — class frequency bar chart (matplotlib Figure)
+- `notebooks/` — usage examples for inspect, errors, batch viz
+- CI workflow (GitHub Actions) — `uv run --extra dev pytest` on push
 
 Don't add W&B/MLflow — Ultralytics writes W&B natively. Don't write a custom Dataset subclass until non-standard augmentation is required.
