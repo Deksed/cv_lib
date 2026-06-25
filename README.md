@@ -81,6 +81,7 @@ cv_lib.__version__                       # "0.1.0"
 from cv_lib import (
     # viz
     compare_gt_pred, load_yolo_gt, show_batch, find_errors, render_errors, ErrorEntry,
+    plot_class_distribution,
     # data
     load_dataset_yaml, class_names_from_yaml, iter_image_label_pairs,
     class_distribution, data_root,
@@ -129,11 +130,12 @@ cp .env.example .env
 ```
 cv_lib/
 ├── src/cv_lib/
-│   ├── cli/                # cvlib CLI: inspect/convert/split/compare/infer/eval/bench/compare-runs/dvc-init
+│   ├── cli/                # cvlib CLI: inspect/convert/split/distribution/compare/infer/eval/bench/compare-runs/dvc-init
 │   ├── viz/
 │   │   ├── compare.py      # GT vs prediction side-by-side
 │   │   ├── batch.py        # show_batch() — грид изображений с боксами
-│   │   └── errors.py       # find_errors() / render_errors() — FP/FN тайлы
+│   │   ├── errors.py       # find_errors() / render_errors() — FP/FN тайлы
+│   │   └── distribution.py # plot_class_distribution() — бар-чарт частоты классов
 │   ├── data/
 │   │   ├── __init__.py     # YOLO-формат, class distribution, iter pairs
 │   │   ├── inspect.py      # проверка датасета: битые, пропущенные, OOB
@@ -149,7 +151,7 @@ cv_lib/
 │   ├── eval.py             # model.val() → mAP-таблица + confusion matrix PNG
 │   ├── batch_infer.py      # батч-инференс → YOLO-лейблы и/или изображения
 │   └── compare_gt_pred.py  # CLI-обёртка над viz.compare
-├── tests/                  # 64 теста, pytest
+├── tests/                  # 71 тест, pytest
 ├── notebooks/
 ├── configs/
 ├── .env.example
@@ -173,6 +175,7 @@ cvlib <command> --help
 | `cvlib inspect` | health-check датасета (битые/пропущенные/невалидные боксы) |
 | `cvlib convert` | CVAT XML / COCO JSON / CVAT CSV → YOLO `.txt` |
 | `cvlib split` | train/val/test split YOLO-датасета + генерация `data.yaml` |
+| `cvlib distribution` | бар-чарт частоты классов (сравнение train/val/test) |
 | `cvlib cvat-query` | поиск/фильтрация по CVAT CSV (label/task/assignee/image) |
 | `cvlib compare` | GT vs prediction side-by-side для одного изображения |
 | `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения |
@@ -190,6 +193,7 @@ cvlib convert annotations.xml --out labels/ --names car person
 cvlib convert cvat_export.csv --out labels/          # CVAT CSV → YOLO
 cvlib cvat-query cvat_export.csv --label car --assignee anna --count
 cvlib split dataset/images --out dataset_split --names car person   # train/val/test + data.yaml
+cvlib distribution dataset_split --out class_dist.png              # частота классов по сплитам
 cvlib eval --model runs/train/best.pt --data dataset/data.yaml
 cvlib bench --model best.pt --imgsz 320 640 1280
 cvlib dvc-init                                       # → dvc.yaml + params.yaml
@@ -327,6 +331,27 @@ errors = find_errors(
 grid = render_errors(errors, class_names=["car"], output_path="errors.png", show=False)
 ```
 
+#### `plot_class_distribution()`
+
+```python
+from cv_lib.viz.distribution import plot_class_distribution
+
+# Один набор лейблов:
+fig = plot_class_distribution("dataset/labels/train", class_names=["car", "person"])
+
+# Сравнение сплитов (грид баров рядом), сортировка по частоте, сохранение:
+fig = plot_class_distribution(
+    {"train": "ds/labels/train", "val": "ds/labels/val", "test": "ds/labels/test"},
+    class_names=["car", "person"],
+    sort=True,            # по убыванию общей частоты
+    horizontal=True,      # горизонтальные бары (удобно для длинных имён)
+    output_path="class_dist.png",
+)  # → matplotlib Figure
+```
+
+`num_classes` и имена выводятся из лейблов, если не заданы. Возвращает `Figure`
+(в ноутбуке отображается сам, в скрипте — `fig.savefig(...)`).
+
 ---
 
 ### `cv_lib.data`
@@ -450,5 +475,5 @@ uv run --extra dev pytest
 uv run --extra dev pytest --cov=cv_lib --cov-report=term-missing
 ```
 
-64 теста, покрывают `data.inspect`, `data.convert`, `data.split`, `data.dvc_gen`,
-`viz.batch`, `viz.errors`, публичный API (`cv_lib.__all__`) и CLI (`cvlib`).
+71 тест, покрывают `data.inspect`, `data.convert`, `data.split`, `data.dvc_gen`,
+`viz.batch`, `viz.errors`, `viz.distribution`, публичный API (`cv_lib.__all__`) и CLI (`cvlib`).

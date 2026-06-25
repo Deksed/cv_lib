@@ -16,6 +16,7 @@ from cv_lib.cli import (
     _compare_runs,
     _convert,
     _cvat_query,
+    _distribution,
     _dvc_init,
     _eval,
     _infer,
@@ -37,6 +38,7 @@ COMMANDS = {
     "compare-runs": _compare_runs,
     "dvc-init": _dvc_init,
     "split": _split,
+    "distribution": _distribution,
 }
 
 

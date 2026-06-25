@@ -30,6 +30,7 @@ _EXPORTS: dict[str, str] = {
     "find_errors": "cv_lib.viz",
     "render_errors": "cv_lib.viz",
     "ErrorEntry": "cv_lib.viz",
+    "plot_class_distribution": "cv_lib.viz",
     # data
     "load_dataset_yaml": "cv_lib.data",
     "class_names_from_yaml": "cv_lib.data",
@@ -114,6 +115,7 @@ if TYPE_CHECKING:
         compare_gt_pred,
         find_errors,
         load_yolo_gt,
+        plot_class_distribution,
         render_errors,
         show_batch,
     )
