@@ -24,6 +24,7 @@ def _minimal_args(name: str) -> list[str]:
     return {
         "inspect": ["inspect", "imgs/"],
         "convert": ["convert", "ann.json", "--out", "labels/"],
+        "cvat-query": ["cvat-query", "export.csv", "--label", "car"],
         "compare": ["compare", "img.jpg", "--model", "m.pt", "--names", "car"],
         "infer": ["infer", "--model", "m.pt", "--images", "imgs/"],
         "eval": ["eval", "--model", "m.pt", "--data", "d.yaml"],
@@ -99,3 +100,32 @@ def test_compare_runs_end_to_end(tmp_path: Path, capsys):
 def test_compare_runs_missing_dir_exits(tmp_path: Path):
     with pytest.raises(SystemExit):
         main(["compare-runs", str(tmp_path / "does_not_exist")])
+
+
+_CVAT_CSV = (
+    "image_name,image_id,job_id,image_width,image_height,instance_label,"
+    "instance_shape,instance_points,bbox_x_tl,bbox_y_tl,bbox_x_br,bbox_y_br,"
+    "task_id,task_name,task_assignee,image_path\n"
+    "frame_001.jpg,0,5,640,480,car,rectangle,,100,50,300,200,1,batch_3,anna,images/frame_001.jpg\n"
+    "frame_002.jpg,1,5,320,240,person,rectangle,,10,20,60,120,1,batch_3,bob,images/frame_002.jpg\n"
+)
+
+
+def test_convert_cvat_csv_end_to_end(tmp_path: Path):
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text(_CVAT_CSV)
+    out_dir = tmp_path / "labels"
+
+    code = main(["convert", str(csv_path), "--out", str(out_dir)])
+    assert code == 0
+    assert (out_dir / "frame_001.txt").exists()
+    assert (out_dir / "frame_002.txt").read_text().startswith("1 ")  # person → idx 1
+
+
+def test_cvat_query_count(tmp_path: Path, capsys):
+    csv_path = tmp_path / "export.csv"
+    csv_path.write_text(_CVAT_CSV)
+
+    code = main(["cvat-query", str(csv_path), "--assignee", "anna", "--count"])
+    assert code == 0
+    assert capsys.readouterr().out.strip() == "1"

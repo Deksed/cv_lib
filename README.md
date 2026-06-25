@@ -109,7 +109,8 @@ cvlib <command> --help
 | Команда | Назначение |
 |---|---|
 | `cvlib inspect` | health-check датасета (битые/пропущенные/невалидные боксы) |
-| `cvlib convert` | CVAT XML / COCO JSON → YOLO `.txt` |
+| `cvlib convert` | CVAT XML / COCO JSON / CVAT CSV → YOLO `.txt` |
+| `cvlib cvat-query` | поиск/фильтрация по CVAT CSV (label/task/assignee/image) |
 | `cvlib compare` | GT vs prediction side-by-side для одного изображения |
 | `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения |
 | `cvlib eval`    | `model.val()` → mAP-таблица + confusion matrix |
@@ -122,6 +123,8 @@ cvlib <command> --help
 ```bash
 cvlib inspect dataset/images/val --data dataset/data.yaml
 cvlib convert annotations.xml --out labels/ --names car person
+cvlib convert cvat_export.csv --out labels/          # CVAT CSV → YOLO
+cvlib cvat-query cvat_export.csv --label car --assignee anna --count
 cvlib eval --model runs/train/best.pt --data dataset/data.yaml
 cvlib bench --model best.pt --imgsz 320 640 1280
 ```

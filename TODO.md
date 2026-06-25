@@ -19,11 +19,11 @@ Roadmap для повседневного использования. Сгруп
   Раздел в README: `uv build` / `pip wheel`, установка wheel в стороннем проекте,
   пример `from cv_lib... import ...`. Зафиксировать публичный API (что реэкспортится из `cv_lib/__init__.py`).
 
-- [ ] **Поддержка CVAT CSV формата** (#2)
-  `src/cv_lib/data/convert.py`: `cvat_csv_to_yolo(csv_path, out_dir, class_names=None)`.
-  Поля: `image_name,image_id,job_id,image_width,image_height,instance_label,instance_shape,`
-  `instance_points,bbox_x_tl,bbox_y_tl,bbox_x_br,bbox_y_br,task_id,task_name,task_assignee,image_path`.
-  Плюс хелпер поиска/фильтрации по CSV (по `task_name`, `instance_label`, `task_assignee`).
+- [x] **Поддержка CVAT CSV формата** (#2)
+  `cvat_csv_to_yolo()` + `query_cvat_csv()` в `data/convert.py` (+ `CVAT_CSV_COLUMNS`).
+  CLI: `cvlib convert *.csv` (автодетект формата) и `cvlib cvat-query` (фильтр по
+  label/task/assignee/image). Фильтр по `instance_shape` (по умолчанию rectangles).
+  Тесты: `tests/test_data_convert.py`, `tests/test_cli.py`.
 
 - [ ] **Генерация `dvc.yaml`** (#3)
   `src/cv_lib/data/dvc_gen.py` + `cvlib dvc-init`. Стандартные стейджи:

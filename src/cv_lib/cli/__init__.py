@@ -15,6 +15,7 @@ from cv_lib.cli import (
     _compare,
     _compare_runs,
     _convert,
+    _cvat_query,
     _eval,
     _infer,
     _inspect,
@@ -26,6 +27,7 @@ from cv_lib.cli._common import configure_console, load_env, setup_logging
 COMMANDS = {
     "inspect": _inspect,
     "convert": _convert,
+    "cvat-query": _cvat_query,
     "compare": _compare,
     "infer": _infer,
     "eval": _eval,

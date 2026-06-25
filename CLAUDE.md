@@ -47,7 +47,7 @@ notebooks/                   # Jupyter experiments
 ## CLI
 
 Единая точка входа `cvlib` (`[project.scripts]` → `cv_lib.cli:main`):
-`cvlib inspect|convert|compare|infer|eval|bench|compare-runs`. Реализация команд —
+`cvlib inspect|convert|cvat-query|compare|infer|eval|bench|compare-runs`. Реализация команд —
 в `cv_lib.cli._<cmd>` (каждый модуль = `HELP` + `add_arguments(parser)` + `run(args)`,
 опц. `EPILOG`), зарегистрированы в `COMMANDS`.
 
@@ -200,10 +200,17 @@ inspect_dataset(images_dir, labels_dir=None, num_classes=None,
 ```python
 cvat_xml_to_yolo(xml_path, out_dir, class_names=None) -> dict[str, int]
 coco_json_to_yolo(json_path, out_dir, class_names=None) -> dict[str, int]
+cvat_csv_to_yolo(csv_path, out_dir, class_names=None,
+                 shapes=("rectangle",)) -> dict[str, int]
+query_cvat_csv(csv_path, **filters) -> list[dict[str, str]]
 ```
-- Both return `{class_name: index}` mapping
-- `class_names=None` → inferred from the file (CVAT labels / COCO categories)
+- Converters return `{class_name: index}` mapping
+- `class_names=None` → inferred from the file (CVAT labels / COCO categories / CSV `instance_label`)
 - Output: one `.txt` per image in YOLO normalised format
+- CVAT CSV = flat per-instance export (`CVAT_CSV_COLUMNS`); `shapes` filters by
+  `instance_shape` (default rectangles only — polygon labels excluded from the class map)
+- `query_cvat_csv` filters rows by exact column matches (e.g. `task_name="batch_3",
+  instance_label="car"`); raises `ValueError` on an unknown column. CLI: `cvlib cvat-query`
 
 ### cv_lib.metrics
 
