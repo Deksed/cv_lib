@@ -32,6 +32,7 @@ def _minimal_args(name: str) -> list[str]:
         "compare-runs": ["compare-runs", "runs/exp1"],
         "dvc-init": ["dvc-init"],
         "split": ["split", "imgs/", "--out", "ds/"],
+        "distribution": ["distribution", "labels/"],
     }[name]
 
 
@@ -152,6 +153,25 @@ def test_dvc_init_refuses_existing(tmp_path: Path):
     assert main(["dvc-init", "--out", str(dvc), "--no-params"]) == 0
     with pytest.raises(SystemExit):
         main(["dvc-init", "--out", str(dvc), "--no-params"])
+
+
+def test_distribution_end_to_end(tmp_path: Path, capsys):
+    # Dataset root: labels/<split> subdirs + a data.yaml for class names.
+    for split, seq in (("train", [0, 0, 1]), ("val", [0, 1, 1])):
+        d = tmp_path / "labels" / split
+        d.mkdir(parents=True)
+        for i, cid in enumerate(seq):
+            (d / f"f_{i}.txt").write_text(f"{cid} 0.5 0.5 0.2 0.2\n")
+    (tmp_path / "data.yaml").write_text("nc: 2\nnames: [car, person]\n")
+    out = tmp_path / "dist.png"
+
+    code = main(["distribution", str(tmp_path), "--out", str(out)])
+    assert code == 0
+    assert out.exists()
+
+    printed = capsys.readouterr().out
+    assert "car" in printed and "person" in printed
+    assert "TOTAL" in printed
 
 
 def test_split_end_to_end(tmp_path: Path):

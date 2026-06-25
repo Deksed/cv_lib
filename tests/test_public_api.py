@@ -12,6 +12,7 @@ EXPECTED_EXPORTS = {
     "find_errors",
     "render_errors",
     "ErrorEntry",
+    "plot_class_distribution",
     "load_dataset_yaml",
     "class_names_from_yaml",
     "iter_image_label_pairs",

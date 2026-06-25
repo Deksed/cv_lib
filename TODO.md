@@ -46,8 +46,11 @@ Roadmap для повседневного использования. Сгруп
   `albumentations` уже в зависимостях, но нигде не используется. Грид «оригинал vs N аугментаций»
   с корректным пересчётом боксов — чтобы быстро проверять пайплайн перед обучением.
 
-- [ ] **Class distribution chart** `src/cv_lib/viz/distribution.py`
-  Из «What's Next» в CLAUDE.md. matplotlib `Figure` с частотой классов (train/val рядом).
+- [x] **Class distribution chart** `src/cv_lib/viz/distribution.py`
+  `plot_class_distribution(labels, class_names=None, sort=, horizontal=, log_scale=, output_path=)`
+  → matplotlib `Figure`; принимает один labels-каталог или `{split: dir}` для сравнения
+  train/val/test рядом. CLI: `cvlib distribution` (автодетект `labels/<split>` + `data.yaml`,
+  печать таблицы счётчиков + сохранение PNG). Тесты: `tests/test_distribution.py`, `tests/test_cli.py`.
 
 - [ ] **`scripts/export.py` + `cvlib export`**
   CLI-обёртка над `cv_lib.export` (ONNX/TensorRT + `validate_export`). Сейчас export только программно.

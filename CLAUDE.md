@@ -17,7 +17,7 @@ src/cv_lib/
 │   ├── __main__.py          # `python -m cv_lib.cli`
 │   ├── _common.py           # configure_console, load_env, setup_logging, add_verbose, resolve_names
 │   └── _<cmd>.py            # one per subcommand: HELP + add_arguments(p) + run(args), opt. EPILOG
-├── viz/                     # compare.py, batch.py, errors.py (GT/pred, grids, FP/FN tiles)
+├── viz/                     # compare.py, batch.py, errors.py, distribution.py (GT/pred, grids, FP/FN tiles, class-freq chart)
 ├── data/                    # __init__ (YOLO parsing), inspect.py, convert.py, split.py, dvc_gen.py
 ├── metrics/__init__.py      # confusion matrix, mAP summary
 ├── train/__init__.py        # train() wrapper: seeds + config snapshot + model.train()
@@ -40,7 +40,7 @@ anything not listed is internal. **When adding a public function, register it in
 ## CLI
 
 Single entry point `cvlib` (`[project.scripts]` → `cv_lib.cli:main`):
-`cvlib inspect|convert|cvat-query|split|compare|infer|eval|bench|compare-runs|dvc-init`.
+`cvlib inspect|convert|cvat-query|split|distribution|compare|infer|eval|bench|compare-runs|dvc-init`.
 
 Add a subcommand: create `cv_lib/cli/_<name>.py` with `HELP` / `add_arguments(parser)`
 / `run(args)` (opt. `EPILOG`) and register it in `COMMANDS` in `cli/__init__.py`.
@@ -109,7 +109,6 @@ Use `cv_lib.set_seeds(seed)` (sets `random`, `numpy`, `torch`, `cudnn.determinis
 
 ## What's Next
 
-- `viz/distribution.py` — class frequency bar chart (matplotlib Figure)
 - `notebooks/` — usage examples (inspect, errors, batch viz)
 - CI workflow (GitHub Actions) — `ruff check` + `uv run --extra dev pytest` on push
 
