@@ -49,6 +49,9 @@ _EXPORTS: dict[str, str] = {
     "generate_dvc_yaml": "cv_lib.data.dvc_gen",
     "generate_params_yaml": "cv_lib.data.dvc_gen",
     "PipelineConfig": "cv_lib.data.dvc_gen",
+    # data.split
+    "train_val_test_split": "cv_lib.data.split",
+    "SplitReport": "cv_lib.data.split",
     # metrics
     "plot_confusion_matrix": "cv_lib.metrics",
     "summarize_map": "cv_lib.metrics",
@@ -102,6 +105,7 @@ if TYPE_CHECKING:
         generate_params_yaml,
     )
     from cv_lib.data.inspect import InspectReport, inspect_dataset  # noqa: F401
+    from cv_lib.data.split import SplitReport, train_val_test_split  # noqa: F401
     from cv_lib.export import export_onnx, export_trt, validate_export  # noqa: F401
     from cv_lib.metrics import plot_confusion_matrix, summarize_map  # noqa: F401
     from cv_lib.train import set_seeds, train  # noqa: F401

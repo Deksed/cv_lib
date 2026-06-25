@@ -86,6 +86,8 @@ from cv_lib import (
     class_distribution, data_root,
     inspect_dataset, InspectReport,
     cvat_xml_to_yolo, coco_json_to_yolo, cvat_csv_to_yolo, query_cvat_csv,
+    # data — train/val/test split
+    train_val_test_split, SplitReport,
     # data — DVC pipeline scaffolding
     build_pipeline, generate_dvc_yaml, generate_params_yaml, PipelineConfig,
     # metrics
@@ -127,7 +129,7 @@ cp .env.example .env
 ```
 cv_lib/
 ├── src/cv_lib/
-│   ├── cli/                # cvlib CLI: inspect/convert/compare/infer/eval/bench/compare-runs/dvc-init
+│   ├── cli/                # cvlib CLI: inspect/convert/split/compare/infer/eval/bench/compare-runs/dvc-init
 │   ├── viz/
 │   │   ├── compare.py      # GT vs prediction side-by-side
 │   │   ├── batch.py        # show_batch() — грид изображений с боксами
@@ -136,6 +138,7 @@ cv_lib/
 │   │   ├── __init__.py     # YOLO-формат, class distribution, iter pairs
 │   │   ├── inspect.py      # проверка датасета: битые, пропущенные, OOB
 │   │   ├── convert.py      # CVAT XML / COCO JSON / CVAT CSV → YOLO txt
+│   │   ├── split.py        # train/val/test split + data.yaml (стратификация)
 │   │   └── dvc_gen.py      # генерация dvc.yaml / params.yaml (DVC-пайплайн)
 │   ├── metrics/
 │   │   └── __init__.py     # confusion matrix, mAP summary
@@ -146,7 +149,7 @@ cv_lib/
 │   ├── eval.py             # model.val() → mAP-таблица + confusion matrix PNG
 │   ├── batch_infer.py      # батч-инференс → YOLO-лейблы и/или изображения
 │   └── compare_gt_pred.py  # CLI-обёртка над viz.compare
-├── tests/                  # 55 тестов, pytest
+├── tests/                  # 64 теста, pytest
 ├── notebooks/
 ├── configs/
 ├── .env.example
@@ -169,6 +172,7 @@ cvlib <command> --help
 |---|---|
 | `cvlib inspect` | health-check датасета (битые/пропущенные/невалидные боксы) |
 | `cvlib convert` | CVAT XML / COCO JSON / CVAT CSV → YOLO `.txt` |
+| `cvlib split` | train/val/test split YOLO-датасета + генерация `data.yaml` |
 | `cvlib cvat-query` | поиск/фильтрация по CVAT CSV (label/task/assignee/image) |
 | `cvlib compare` | GT vs prediction side-by-side для одного изображения |
 | `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения |
@@ -185,6 +189,7 @@ cvlib inspect dataset/images/val --data dataset/data.yaml
 cvlib convert annotations.xml --out labels/ --names car person
 cvlib convert cvat_export.csv --out labels/          # CVAT CSV → YOLO
 cvlib cvat-query cvat_export.csv --label car --assignee anna --count
+cvlib split dataset/images --out dataset_split --names car person   # train/val/test + data.yaml
 cvlib eval --model runs/train/best.pt --data dataset/data.yaml
 cvlib bench --model best.pt --imgsz 320 640 1280
 cvlib dvc-init                                       # → dvc.yaml + params.yaml
@@ -359,6 +364,25 @@ cvat_xml_to_yolo("annotations.xml", out_dir="labels/", class_names=["car", "pers
 coco_json_to_yolo("instances_val.json", out_dir="labels/")
 ```
 
+#### `train_val_test_split()`
+
+```python
+from cv_lib.data.split import train_val_test_split
+
+report = train_val_test_split(
+    images_dir="dataset/images",
+    labels_dir="dataset/labels",   # inferred from images path if omitted
+    out_dir="dataset_split",
+    ratios=(0.8, 0.1, 0.1),        # 2 values → train/val only
+    seed=42,
+    stratify_by_class=True,        # bucket by dominant class, keeps rare classes
+    class_names=["car", "person"], # else inferred as ["0", "1", ...]
+    mode="copy",                   # "copy" | "symlink" | "move"
+)
+report.print()
+# → <out>/images/{train,val,test}, <out>/labels/{train,val,test}, <out>/data.yaml
+```
+
 ---
 
 ### `cv_lib.metrics`
@@ -426,5 +450,5 @@ uv run --extra dev pytest
 uv run --extra dev pytest --cov=cv_lib --cov-report=term-missing
 ```
 
-55 тестов, покрывают `data.inspect`, `data.convert`, `data.dvc_gen`, `viz.batch`,
-`viz.errors`, публичный API (`cv_lib.__all__`) и CLI (`cvlib`).
+64 теста, покрывают `data.inspect`, `data.convert`, `data.split`, `data.dvc_gen`,
+`viz.batch`, `viz.errors`, публичный API (`cv_lib.__all__`) и CLI (`cvlib`).

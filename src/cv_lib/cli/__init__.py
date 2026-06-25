@@ -20,6 +20,7 @@ from cv_lib.cli import (
     _eval,
     _infer,
     _inspect,
+    _split,
 )
 from cv_lib.cli._common import configure_console, load_env, setup_logging
 
@@ -35,6 +36,7 @@ COMMANDS = {
     "bench": _bench,
     "compare-runs": _compare_runs,
     "dvc-init": _dvc_init,
+    "split": _split,
 }
 
 
