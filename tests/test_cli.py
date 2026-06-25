@@ -28,6 +28,7 @@ def _minimal_args(name: str) -> list[str]:
         "infer": ["infer", "--model", "m.pt", "--images", "imgs/"],
         "eval": ["eval", "--model", "m.pt", "--data", "d.yaml"],
         "bench": ["bench", "--model", "m.pt"],
+        "compare-runs": ["compare-runs", "runs/exp1"],
     }[name]
 
 
@@ -73,3 +74,28 @@ def test_convert_format_inference_error(tmp_path: Path):
     bad.write_text("")
     with pytest.raises(SystemExit):
         main(["convert", str(bad), "--out", str(tmp_path / "out")])
+
+
+def test_compare_runs_end_to_end(tmp_path: Path, capsys):
+    run_dir = tmp_path / "exp1"
+    run_dir.mkdir()
+    (run_dir / "train_config.json").write_text(
+        json.dumps({"model_path": "yolov8n.pt", "epochs": 50, "imgsz": 640})
+    )
+    (run_dir / "results.csv").write_text(
+        "epoch, metrics/mAP50(B), metrics/mAP50-95(B)\n"
+        "1, 0.5, 0.3\n"
+        "2, 0.8, 0.6\n"
+    )
+
+    code = main(["compare-runs", str(run_dir)])
+    assert code == 0
+
+    out = capsys.readouterr().out
+    assert "yolov8n.pt" in out
+    assert "0.8000" in out  # best mAP50 row selected
+
+
+def test_compare_runs_missing_dir_exits(tmp_path: Path):
+    with pytest.raises(SystemExit):
+        main(["compare-runs", str(tmp_path / "does_not_exist")])

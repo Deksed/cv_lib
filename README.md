@@ -69,7 +69,7 @@ cp .env.example .env
 ```
 cv_lib/
 ├── src/cv_lib/
-│   ├── cli/                # cvlib CLI: inspect/convert/compare/infer/eval/bench
+│   ├── cli/                # cvlib CLI: inspect/convert/compare/infer/eval/bench/compare-runs
 │   ├── viz/
 │   │   ├── compare.py      # GT vs prediction side-by-side
 │   │   ├── batch.py        # show_batch() — грид изображений с боксами
@@ -114,6 +114,10 @@ cvlib <command> --help
 | `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения |
 | `cvlib eval`    | `model.val()` → mAP-таблица + confusion matrix |
 | `cvlib bench`   | sanity-check + бенчмарк латентности/FPS |
+| `cvlib compare-runs` | сравнение train-прогонов: конфиги + лучшие метрики |
+
+У всех подкоманд есть флаг `--verbose` (DEBUG-логи через loguru); статус-сообщения
+идут в stderr, форматированные таблицы — в stdout. Версия: `cvlib --version` / `cvlib -V`.
 
 ```bash
 cvlib inspect dataset/images/val --data dataset/data.yaml

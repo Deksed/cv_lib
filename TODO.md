@@ -63,9 +63,11 @@ Roadmap для повседневного использования. Сгруп
 
 ## P3 — приятные мелочи
 
-- [ ] **`__version__`** в `cv_lib/__init__.py` + `cvlib --version`.
-- [ ] **Структурное логирование** вместо `print` в скриптах (модуль `logging`, флаг `--verbose`).
-- [ ] **Сравнение прогонов** — свести `train_config.json` нескольких run'ов в таблицу (расширить идею `check_infer.py` на метрики, не только латентность).
+- [x] **`__version__`** в `cv_lib/__init__.py` + `cvlib --version` / `-V` (PR #4 + интеграция в CLI).
+- [x] **Структурное логирование** — loguru, общий `--verbose` (`add_verbose`/`setup_logging`),
+  статус-сообщения через `logger`, таблицы остаются на `print` (PR #4 + перенос в пакет `cli/`).
+- [x] **Сравнение прогонов** — `scripts/compare_runs.py` + подкоманда `cvlib compare-runs`
+  (configs из `train_config.json` + лучшие метрики из `results.csv`).
 
 ---
 

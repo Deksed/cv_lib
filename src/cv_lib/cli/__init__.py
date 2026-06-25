@@ -10,7 +10,15 @@ from __future__ import annotations
 import argparse
 
 from cv_lib import __version__
-from cv_lib.cli import _bench, _compare, _convert, _eval, _infer, _inspect
+from cv_lib.cli import (
+    _bench,
+    _compare,
+    _compare_runs,
+    _convert,
+    _eval,
+    _infer,
+    _inspect,
+)
 from cv_lib.cli._common import configure_console, load_env, setup_logging
 
 # Ordered registry: command name → implementation module.
@@ -22,6 +30,7 @@ COMMANDS = {
     "infer": _infer,
     "eval": _eval,
     "bench": _bench,
+    "compare-runs": _compare_runs,
 }
 
 

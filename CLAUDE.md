@@ -30,7 +30,8 @@ scripts/                     # thin shims over cv_lib.cli (backwards compat; pre
 ├── eval.py                  # ≡ cvlib eval   — model.val() → mAP table + confusion matrix
 ├── batch_infer.py           # ≡ cvlib infer  — batch inference → YOLO labels / annotated imgs
 ├── compare_gt_pred.py       # ≡ cvlib compare — GT vs prediction side-by-side
-└── check_infer.py           # ≡ cvlib bench  — inference sanity check + latency benchmark
+├── check_infer.py           # ≡ cvlib bench  — inference sanity check + latency benchmark
+└── compare_runs.py          # ≡ cvlib compare-runs — train run configs + metrics table
 tests/
 ├── conftest.py              # pytest fixtures: sample_image, yolo_label_file
 ├── test_cli.py
@@ -46,12 +47,17 @@ notebooks/                   # Jupyter experiments
 ## CLI
 
 Единая точка входа `cvlib` (`[project.scripts]` → `cv_lib.cli:main`):
-`cvlib inspect|convert|compare|infer|eval|bench`. Реализация команд — в `cv_lib.cli._<cmd>`
-(каждый модуль = `HELP` + `add_arguments(parser)` + `run(args)`), зарегистрированы в `COMMANDS`.
+`cvlib inspect|convert|compare|infer|eval|bench|compare-runs`. Реализация команд —
+в `cv_lib.cli._<cmd>` (каждый модуль = `HELP` + `add_arguments(parser)` + `run(args)`,
+опц. `EPILOG`), зарегистрированы в `COMMANDS`.
 
 Добавление новой подкоманды: создать `cv_lib/cli/_<name>.py` с `HELP`/`add_arguments`/`run`
 и вписать в `COMMANDS` в `cv_lib/cli/__init__.py`. Скрипты в `scripts/` — тонкие шимы, дублировать
 в них логику нельзя. UTF-8 для вывода обеспечивает `configure_console()` (рамки `─`/`█` ломают cp1251).
+
+Логирование: `add_verbose(parser)` добавляет общий `--verbose`, `setup_logging(verbose)`
+настраивает loguru (DEBUG/INFO → stderr). Статус-сообщения — через `logger`, форматированные
+таблицы остаются на `print` (stdout). `main()` и шимы вызывают `setup_logging` после парсинга.
 
 ## Setup
 
