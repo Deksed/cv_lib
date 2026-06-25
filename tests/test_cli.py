@@ -31,6 +31,7 @@ def _minimal_args(name: str) -> list[str]:
         "bench": ["bench", "--model", "m.pt"],
         "compare-runs": ["compare-runs", "runs/exp1"],
         "dvc-init": ["dvc-init"],
+        "split": ["split", "imgs/", "--out", "ds/"],
     }[name]
 
 
@@ -151,3 +152,24 @@ def test_dvc_init_refuses_existing(tmp_path: Path):
     assert main(["dvc-init", "--out", str(dvc), "--no-params"]) == 0
     with pytest.raises(SystemExit):
         main(["dvc-init", "--out", str(dvc), "--no-params"])
+
+
+def test_split_end_to_end(tmp_path: Path):
+    import yaml
+
+    images, labels = tmp_path / "images", tmp_path / "labels"
+    images.mkdir()
+    labels.mkdir()
+    for i in range(10):
+        (images / f"f_{i}.jpg").write_bytes(b"x")
+        (labels / f"f_{i}.txt").write_text(f"{i % 2} 0.5 0.5 0.2 0.2\n")
+    out = tmp_path / "ds"
+
+    code = main(["split", str(images), "--labels", str(labels), "--out", str(out),
+                 "--ratios", "0.8", "0.2", "--names", "car", "person"])
+    assert code == 0
+
+    doc = yaml.safe_load((out / "data.yaml").read_text(encoding="utf-8"))
+    assert doc["names"] == ["car", "person"]
+    assert (out / "images" / "train").is_dir()
+    assert not (out / "images" / "test").exists()  # two-way split

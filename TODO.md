@@ -36,9 +36,11 @@ Roadmap для повседневного использования. Сгруп
 
 ## P1 — частые операции, которых сейчас нет
 
-- [ ] **Сплит датасета** `src/cv_lib/data/split.py`
+- [x] **Сплит датасета** `src/cv_lib/data/split.py`
   `train_val_test_split(images_dir, labels_dir, ratios=(0.8,0.1,0.1), seed=42, stratify_by_class=True)`
-  + генерация `data.yaml`. Нужен и сам по себе, и как стейдж `split` для DVC (#3).
+  + генерация `data.yaml`. CLI: `cvlib split` (стратификация по доминирующему классу,
+  `--mode copy|symlink|move`, 2- или 3-way). Завязан как стейдж `split` в `dvc_gen`.
+  Тесты: `tests/test_split.py`, `tests/test_cli.py`.
 
 - [ ] **Превью аугментаций** `src/cv_lib/viz/augment.py`
   `albumentations` уже в зависимостях, но нигде не используется. Грид «оригинал vs N аугментаций»

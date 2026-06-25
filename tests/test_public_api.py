@@ -27,6 +27,8 @@ EXPECTED_EXPORTS = {
     "generate_dvc_yaml",
     "generate_params_yaml",
     "PipelineConfig",
+    "train_val_test_split",
+    "SplitReport",
     "plot_confusion_matrix",
     "summarize_map",
     "set_seeds",

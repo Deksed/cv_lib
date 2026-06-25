@@ -10,7 +10,7 @@ Standard stages (issue #3)::
     collect → split → train (external) → compare-with-prev → report
 
 - **collect** — convert raw annotations (CVAT/COCO) to YOLO labels (``cvlib convert``).
-- **split** — train/val/test split + ``data.yaml`` (``cv_lib.data.split``, planned).
+- **split** — train/val/test split + ``data.yaml`` (``cvlib split``).
 - **train** — your own training module; hyper-params live in ``params.yaml``.
 - **compare-with-prev** — diff the new run against previous ones (``cvlib compare-runs``).
 - **report** — eval the best checkpoint, write a confusion matrix (``cvlib eval``).
@@ -69,7 +69,7 @@ def _stage_collect(c: PipelineConfig) -> dict[str, Any]:
 
 def _stage_split(c: PipelineConfig) -> dict[str, Any]:
     return {
-        "cmd": f"python -m cv_lib.data.split {c.images_dir} {c.labels_dir} --out {c.dataset_dir}",
+        "cmd": f"cvlib split {c.images_dir} --labels {c.labels_dir} --out {c.dataset_dir}",
         "deps": [c.images_dir, c.labels_dir],
         "outs": [c.dataset_dir],
     }
