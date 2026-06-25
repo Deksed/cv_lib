@@ -19,11 +19,18 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from loguru import logger
+
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cv_lib.metrics import plot_confusion_matrix, summarize_map
+
+
+def _setup_logging(verbose: bool) -> None:
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG" if verbose else "INFO", format="{level}: {message}")
 
 
 def main() -> None:
@@ -60,7 +67,10 @@ def main() -> None:
         default=None,
         help="Device override, e.g. 'cpu', '0', 'cuda:0' (default: auto).",
     )
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
+
+    _setup_logging(args.verbose)
 
     from ultralytics import YOLO
 
@@ -71,12 +81,12 @@ def main() -> None:
         "conf": args.conf,
         "iou": args.iou,
         "split": args.split,
-        "verbose": False,
+        "verbose": args.verbose,
     }
     if args.device is not None:
         val_kwargs["device"] = args.device
 
-    print(f"Evaluating {args.model} on {args.data} [{args.split}] …")
+    logger.info("Evaluating {} on {} [{}] …", args.model, args.data, args.split)
     results = model.val(**val_kwargs)
 
     summary = summarize_map(results)
@@ -129,11 +139,11 @@ def main() -> None:
                     class_names=class_names,
                 )
                 fig.savefig(cm_path, dpi=150, bbox_inches="tight")
-                print(f"\nConfusion matrix saved → {cm_path}")
+                logger.info("Confusion matrix saved → {}", cm_path)
             else:
-                print("\nWarning: confusion matrix is empty, skipping save.")
+                logger.warning("Confusion matrix is empty, skipping save.")
         else:
-            print("\nWarning: confusion matrix not available in results, skipping save.")
+            logger.warning("Confusion matrix not available in results, skipping save.")
 
 
 if __name__ == "__main__":

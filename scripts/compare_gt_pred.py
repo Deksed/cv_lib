@@ -23,11 +23,18 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from loguru import logger
+
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cv_lib.viz.compare import compare_gt_pred
+
+
+def _setup_logging(verbose: bool) -> None:
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG" if verbose else "INFO", format="{level}: {message}")
 
 
 def _load_names_from_yaml(yaml_path: str) -> list[str]:
@@ -55,8 +62,11 @@ def main() -> None:
     parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold for predictions (default: 0.25).")
     parser.add_argument("--output", default=None, help="Save result to this path instead of (or in addition to) display.")
     parser.add_argument("--no-show", action="store_true", help="Do not open a display window (useful on headless servers).")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
 
     args = parser.parse_args()
+
+    _setup_logging(args.verbose)
 
     # DATA_ROOT applied to relative paths if set
     data_root = os.environ.get("DATA_ROOT", "")

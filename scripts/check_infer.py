@@ -54,8 +54,14 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+
+def _setup_logging(verbose: bool) -> None:
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG" if verbose else "INFO", format="{level}: {message}")
 
 
 # ---------------------------------------------------------------------------
@@ -287,24 +293,27 @@ def main() -> None:
         "--save", action="store_true",
         help="Save annotated images (ignored for synthetic input).",
     )
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
+
+    _setup_logging(args.verbose)
 
     models = _collect_models(args.model)
     if not models:
-        print("Error: no .pt model files found.")
+        logger.error("No .pt model files found.")
         sys.exit(1)
 
     images = _collect_images(args.source)
     if args.source and images is None:
-        print(f"Warning: no images found in {args.source} — using synthetic input.")
+        logger.warning("No images found in {} — using synthetic input.", args.source)
 
     src_desc = (
         f"{len(images)} image(s) from {args.source}" if images else "synthetic random image"
     )
-    print(f"\nModels   : {', '.join(m.name for m in models)}")
-    print(f"Sizes    : {args.imgsz}")
-    print(f"Source   : {src_desc}")
-    print(f"Runs     : {args.warmup} warmup + {args.runs} timed  |  conf={args.conf}")
+    logger.info("Models   : {}", ", ".join(m.name for m in models))
+    logger.info("Sizes    : {}", args.imgsz)
+    logger.info("Source   : {}", src_desc)
+    logger.info("Runs     : {} warmup + {} timed  |  conf={}", args.warmup, args.runs, args.conf)
 
     table_rows: list[dict] = []
     breakdown: list[tuple[str, int, dict]] = []
@@ -312,7 +321,7 @@ def main() -> None:
     for model_path in models:
         for imgsz in args.imgsz:
             label = model_path.name
-            print(f"\n  checking {label}  imgsz={imgsz} …", end="", flush=True)
+            logger.info("Checking {}  imgsz={} …", label, imgsz)
             try:
                 stats = benchmark_model(
                     model_path=model_path,
@@ -324,9 +333,9 @@ def main() -> None:
                     device=args.device,
                     save=args.save,
                 )
-                print(f"  {_fmt(stats['mean_ms'])} ms/frame  {_fmt(stats['fps'])} FPS")
+                logger.info("  {} ms/frame  {} FPS", _fmt(stats["mean_ms"]), _fmt(stats["fps"]))
             except Exception as exc:
-                print(f"  FAILED: {exc}")
+                logger.error("FAILED: {}", exc)
                 continue
 
             table_rows.append({"model": label, "imgsz": imgsz, **stats})
