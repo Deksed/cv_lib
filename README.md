@@ -47,6 +47,62 @@ pip install -e ".[dev]"
 
 ---
 
+## Сборка и использование как библиотеки
+
+`cv_lib` можно собрать в wheel/sdist и поставить в сторонний проект.
+
+### Сборка дистрибутива
+
+```bash
+uv build                 # → dist/cv_lib-<версия>-py3-none-any.whl + .tar.gz
+# или, без uv:
+pip wheel . --no-deps -w dist/
+```
+
+`uv build` кладёт в `dist/` оба артефакта: wheel (`*.whl`) и sdist (`*.tar.gz`).
+
+### Установка в стороннем проекте
+
+```bash
+pip install cv_lib-0.1.0-py3-none-any.whl
+```
+
+> `torch`/`torchvision` не входят в зависимости wheel (ставятся отдельно с нужного
+> CUDA-индекса — см. Setup). Установите их в целевом окружении до или после wheel.
+
+### Публичный API
+
+Всё, что нужно в коде, реэкспортится с верхнего уровня пакета — импортируйте прямо из `cv_lib`:
+
+```python
+import cv_lib
+cv_lib.__version__                       # "0.1.0"
+
+from cv_lib import (
+    # viz
+    compare_gt_pred, load_yolo_gt, show_batch, find_errors, render_errors, ErrorEntry,
+    # data
+    load_dataset_yaml, class_names_from_yaml, iter_image_label_pairs,
+    class_distribution, data_root,
+    inspect_dataset, InspectReport,
+    cvat_xml_to_yolo, coco_json_to_yolo, cvat_csv_to_yolo, query_cvat_csv,
+    # metrics
+    plot_confusion_matrix, summarize_map,
+    # train
+    set_seeds, train,
+    # export
+    export_onnx, export_trt, validate_export,
+)
+```
+
+Имена импортируются **лениво** (PEP 562): `import cv_lib` дёшев и не тянет
+OpenCV/torch/Ultralytics, пока конкретная функция не понадобится. Полный список —
+`cv_lib.__all__`; всё, чего там нет, считается внутренним и может меняться без
+предупреждения. Подмодули (`cv_lib.viz`, `cv_lib.data`, `cv_lib.metrics`,
+`cv_lib.train`, `cv_lib.export`, `cv_lib.cli`) тоже импортируются напрямую.
+
+---
+
 ## Переменные окружения
 
 Скопируйте `.env.example` в `.env` и заполните:

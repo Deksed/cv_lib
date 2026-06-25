@@ -15,9 +15,11 @@ Roadmap для повседневного использования. Сгруп
   `inspect`, `convert`, `compare`, `infer`, `eval`, `bench`. Скрипты в `scripts/` стали
   тонкими шимами над общим кодом (обратная совместимость, без дублирования). Тесты: `tests/test_cli.py`.
 
-- [ ] **Инструкция по сборке и установке как библиотеки** (#1)
-  Раздел в README: `uv build` / `pip wheel`, установка wheel в стороннем проекте,
-  пример `from cv_lib... import ...`. Зафиксировать публичный API (что реэкспортится из `cv_lib/__init__.py`).
+- [x] **Инструкция по сборке и установке как библиотеки** (#1)
+  Раздел в README «Сборка и использование как библиотеки»: `uv build` / `pip wheel`,
+  установка wheel в стороннем проекте, пример `from cv_lib import ...`. Публичный API
+  зафиксирован в `cv_lib/__init__.py` (ленивый реэкспорт через `__getattr__`/`__all__`).
+  Тесты: `tests/test_public_api.py`.
 
 - [x] **Поддержка CVAT CSV формата** (#2)
   `cvat_csv_to_yolo()` + `query_cvat_csv()` в `data/convert.py` (+ `CVAT_CSV_COLUMNS`).
