@@ -86,6 +86,8 @@ from cv_lib import (
     class_distribution, data_root,
     inspect_dataset, InspectReport,
     cvat_xml_to_yolo, coco_json_to_yolo, cvat_csv_to_yolo, query_cvat_csv,
+    # data — DVC pipeline scaffolding
+    build_pipeline, generate_dvc_yaml, generate_params_yaml, PipelineConfig,
     # metrics
     plot_confusion_matrix, summarize_map,
     # train
@@ -125,7 +127,7 @@ cp .env.example .env
 ```
 cv_lib/
 ├── src/cv_lib/
-│   ├── cli/                # cvlib CLI: inspect/convert/compare/infer/eval/bench/compare-runs
+│   ├── cli/                # cvlib CLI: inspect/convert/compare/infer/eval/bench/compare-runs/dvc-init
 │   ├── viz/
 │   │   ├── compare.py      # GT vs prediction side-by-side
 │   │   ├── batch.py        # show_batch() — грид изображений с боксами
@@ -133,7 +135,8 @@ cv_lib/
 │   ├── data/
 │   │   ├── __init__.py     # YOLO-формат, class distribution, iter pairs
 │   │   ├── inspect.py      # проверка датасета: битые, пропущенные, OOB
-│   │   └── convert.py      # CVAT XML / COCO JSON → YOLO txt
+│   │   ├── convert.py      # CVAT XML / COCO JSON / CVAT CSV → YOLO txt
+│   │   └── dvc_gen.py      # генерация dvc.yaml / params.yaml (DVC-пайплайн)
 │   ├── metrics/
 │   │   └── __init__.py     # confusion matrix, mAP summary
 │   ├── train/
@@ -143,7 +146,7 @@ cv_lib/
 │   ├── eval.py             # model.val() → mAP-таблица + confusion matrix PNG
 │   ├── batch_infer.py      # батч-инференс → YOLO-лейблы и/или изображения
 │   └── compare_gt_pred.py  # CLI-обёртка над viz.compare
-├── tests/                  # 24 теста, pytest
+├── tests/                  # 55 тестов, pytest
 ├── notebooks/
 ├── configs/
 ├── .env.example
@@ -172,6 +175,7 @@ cvlib <command> --help
 | `cvlib eval`    | `model.val()` → mAP-таблица + confusion matrix |
 | `cvlib bench`   | sanity-check + бенчмарк латентности/FPS |
 | `cvlib compare-runs` | сравнение train-прогонов: конфиги + лучшие метрики |
+| `cvlib dvc-init` | генерация `dvc.yaml` (+ `params.yaml`) — DVC-пайплайн train/eval |
 
 У всех подкоманд есть флаг `--verbose` (DEBUG-логи через loguru); статус-сообщения
 идут в stderr, форматированные таблицы — в stdout. Версия: `cvlib --version` / `cvlib -V`.
@@ -183,6 +187,29 @@ cvlib convert cvat_export.csv --out labels/          # CVAT CSV → YOLO
 cvlib cvat-query cvat_export.csv --label car --assignee anna --count
 cvlib eval --model runs/train/best.pt --data dataset/data.yaml
 cvlib bench --model best.pt --imgsz 320 640 1280
+cvlib dvc-init                                       # → dvc.yaml + params.yaml
+```
+
+### DVC-пайплайн
+
+`cvlib dvc-init` генерирует **скаффолд** `dvc.yaml` со стандартными стейджами
+`collect → split → train → compare-with-prev → report` и `params.yaml` с
+гиперпараметрами обучения. cv_lib не зависит от DVC — поставьте его отдельно
+(`pip install dvc`), отредактируйте пути под свой датасет и запустите `dvc repro`.
+
+```bash
+cvlib dvc-init --run-name yolov8n_640                # переопределить имя прогона
+cvlib dvc-init --stages collect split train --no-params --force
+```
+
+Программно — через `cv_lib.dvc_gen`:
+
+```python
+from cv_lib import PipelineConfig, generate_dvc_yaml, generate_params_yaml
+
+cfg = PipelineConfig(annotations="data/raw/ann.json", run_name="exp1")
+generate_dvc_yaml("dvc.yaml", config=cfg)
+generate_params_yaml("params.yaml")
 ```
 
 Скрипты в `scripts/` — тонкие обёртки над теми же командами (общий код в `cv_lib.cli`),
@@ -399,4 +426,5 @@ uv run --extra dev pytest
 uv run --extra dev pytest --cov=cv_lib --cov-report=term-missing
 ```
 
-24 теста, покрывают `data.inspect`, `data.convert`, `viz.batch`, `viz.errors`.
+55 тестов, покрывают `data.inspect`, `data.convert`, `data.dvc_gen`, `viz.batch`,
+`viz.errors`, публичный API (`cv_lib.__all__`) и CLI (`cvlib`).

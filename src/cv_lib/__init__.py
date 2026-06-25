@@ -44,6 +44,11 @@ _EXPORTS: dict[str, str] = {
     "coco_json_to_yolo": "cv_lib.data.convert",
     "cvat_csv_to_yolo": "cv_lib.data.convert",
     "query_cvat_csv": "cv_lib.data.convert",
+    # data.dvc_gen
+    "build_pipeline": "cv_lib.data.dvc_gen",
+    "generate_dvc_yaml": "cv_lib.data.dvc_gen",
+    "generate_params_yaml": "cv_lib.data.dvc_gen",
+    "PipelineConfig": "cv_lib.data.dvc_gen",
     # metrics
     "plot_confusion_matrix": "cv_lib.metrics",
     "summarize_map": "cv_lib.metrics",
@@ -89,6 +94,12 @@ if TYPE_CHECKING:
         cvat_csv_to_yolo,
         cvat_xml_to_yolo,
         query_cvat_csv,
+    )
+    from cv_lib.data.dvc_gen import (  # noqa: F401
+        PipelineConfig,
+        build_pipeline,
+        generate_dvc_yaml,
+        generate_params_yaml,
     )
     from cv_lib.data.inspect import InspectReport, inspect_dataset  # noqa: F401
     from cv_lib.export import export_onnx, export_trt, validate_export  # noqa: F401

@@ -30,6 +30,7 @@ def _minimal_args(name: str) -> list[str]:
         "eval": ["eval", "--model", "m.pt", "--data", "d.yaml"],
         "bench": ["bench", "--model", "m.pt"],
         "compare-runs": ["compare-runs", "runs/exp1"],
+        "dvc-init": ["dvc-init"],
     }[name]
 
 
@@ -129,3 +130,24 @@ def test_cvat_query_count(tmp_path: Path, capsys):
     code = main(["cvat-query", str(csv_path), "--assignee", "anna", "--count"])
     assert code == 0
     assert capsys.readouterr().out.strip() == "1"
+
+
+def test_dvc_init_end_to_end(tmp_path: Path):
+    import yaml
+
+    dvc = tmp_path / "dvc.yaml"
+    params = tmp_path / "params.yaml"
+
+    code = main(["dvc-init", "--out", str(dvc), "--params-out", str(params)])
+    assert code == 0
+    assert dvc.exists() and params.exists()
+
+    stages = yaml.safe_load(dvc.read_text(encoding="utf-8"))["stages"]
+    assert "train" in stages and "report" in stages
+
+
+def test_dvc_init_refuses_existing(tmp_path: Path):
+    dvc = tmp_path / "dvc.yaml"
+    assert main(["dvc-init", "--out", str(dvc), "--no-params"]) == 0
+    with pytest.raises(SystemExit):
+        main(["dvc-init", "--out", str(dvc), "--no-params"])

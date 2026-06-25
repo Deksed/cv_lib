@@ -16,6 +16,7 @@ from cv_lib.cli import (
     _compare_runs,
     _convert,
     _cvat_query,
+    _dvc_init,
     _eval,
     _infer,
     _inspect,
@@ -33,6 +34,7 @@ COMMANDS = {
     "eval": _eval,
     "bench": _bench,
     "compare-runs": _compare_runs,
+    "dvc-init": _dvc_init,
 }
 
 
