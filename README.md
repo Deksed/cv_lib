@@ -69,6 +69,7 @@ cp .env.example .env
 ```
 cv_lib/
 ├── src/cv_lib/
+│   ├── cli/                # cvlib CLI: inspect/convert/compare/infer/eval/bench
 │   ├── viz/
 │   │   ├── compare.py      # GT vs prediction side-by-side
 │   │   ├── batch.py        # show_batch() — грид изображений с боксами
@@ -93,6 +94,36 @@ cv_lib/
 ├── pyproject.toml
 └── requirements-torch.txt
 ```
+
+---
+
+## CLI
+
+После установки пакета доступна единая команда `cvlib` (entry point из `pyproject.toml`):
+
+```bash
+cvlib --help
+cvlib <command> --help
+```
+
+| Команда | Назначение |
+|---|---|
+| `cvlib inspect` | health-check датасета (битые/пропущенные/невалидные боксы) |
+| `cvlib convert` | CVAT XML / COCO JSON → YOLO `.txt` |
+| `cvlib compare` | GT vs prediction side-by-side для одного изображения |
+| `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения |
+| `cvlib eval`    | `model.val()` → mAP-таблица + confusion matrix |
+| `cvlib bench`   | sanity-check + бенчмарк латентности/FPS |
+
+```bash
+cvlib inspect dataset/images/val --data dataset/data.yaml
+cvlib convert annotations.xml --out labels/ --names car person
+cvlib eval --model runs/train/best.pt --data dataset/data.yaml
+cvlib bench --model best.pt --imgsz 320 640 1280
+```
+
+Скрипты в `scripts/` — тонкие обёртки над теми же командами (общий код в `cv_lib.cli`),
+оставлены для обратной совместимости. `cvlib eval ...` ≡ `python scripts/eval.py ...`.
 
 ---
 

@@ -8,6 +8,10 @@ CV utility library for iterating on object detection models. Core stack: **Ultra
 
 ```
 src/cv_lib/
+├── cli/                     # cvlib unified CLI (entry point `cvlib` in pyproject)
+│   ├── __init__.py          # build_parser() + main() dispatch; COMMANDS registry
+│   ├── _common.py           # configure_console, load_env, resolve_names, apply_data_root
+│   └── _eval/_infer/_compare/_inspect/_convert/_bench.py  # add_arguments(p) + run(args)
 ├── viz/
 │   ├── __init__.py          # re-exports: compare_gt_pred, load_yolo_gt, show_batch, find_errors, render_errors
 │   ├── compare.py           # side-by-side GT vs prediction visualizer
@@ -22,12 +26,14 @@ src/cv_lib/
 ├── train/
 │   └── __init__.py          # train() wrapper: seeds + config snapshot + model.train()
 └── export.py                # ONNX / TensorRT export + validate
-scripts/
-├── eval.py                  # model.val() → mAP table + confusion matrix PNG
-├── batch_infer.py           # batch inference → YOLO labels and/or annotated images
-└── compare_gt_pred.py       # CLI wrapper over viz.compare
+scripts/                     # thin shims over cv_lib.cli (backwards compat; prefer `cvlib`)
+├── eval.py                  # ≡ cvlib eval   — model.val() → mAP table + confusion matrix
+├── batch_infer.py           # ≡ cvlib infer  — batch inference → YOLO labels / annotated imgs
+├── compare_gt_pred.py       # ≡ cvlib compare — GT vs prediction side-by-side
+└── check_infer.py           # ≡ cvlib bench  — inference sanity check + latency benchmark
 tests/
 ├── conftest.py              # pytest fixtures: sample_image, yolo_label_file
+├── test_cli.py
 ├── test_data_inspect.py
 ├── test_data_convert.py
 ├── test_viz_batch.py
@@ -36,6 +42,16 @@ configs/                     # YOLO data.yaml templates (currently empty)
 notebooks/                   # Jupyter experiments
 .env.example                 # env var template — copy to .env
 ```
+
+## CLI
+
+Единая точка входа `cvlib` (`[project.scripts]` → `cv_lib.cli:main`):
+`cvlib inspect|convert|compare|infer|eval|bench`. Реализация команд — в `cv_lib.cli._<cmd>`
+(каждый модуль = `HELP` + `add_arguments(parser)` + `run(args)`), зарегистрированы в `COMMANDS`.
+
+Добавление новой подкоманды: создать `cv_lib/cli/_<name>.py` с `HELP`/`add_arguments`/`run`
+и вписать в `COMMANDS` в `cv_lib/cli/__init__.py`. Скрипты в `scripts/` — тонкие шимы, дублировать
+в них логику нельзя. UTF-8 для вывода обеспечивает `configure_console()` (рамки `─`/`█` ломают cp1251).
 
 ## Setup
 

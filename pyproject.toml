@@ -24,6 +24,9 @@ dependencies = [
     "matplotlib>=3.9",
 ]
 
+[project.scripts]
+cvlib = "cv_lib.cli:main"
+
 [project.optional-dependencies]
 # torch + torchvision ставятся через отдельный extra, чтобы uv мог
 # подтянуть их с cu118-индекса (pip-юзеры используют requirements-torch.txt)
@@ -50,9 +53,6 @@ torchvision = { index = "pytorch-cu118" }
 name = "pytorch-cu118"
 url = "https://download.pytorch.org/whl/cu118"
 explicit = true
-
-[project.scripts]
-cvlib = "cv_lib.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
