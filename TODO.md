@@ -27,9 +27,12 @@ Roadmap для повседневного использования. Сгруп
   label/task/assignee/image). Фильтр по `instance_shape` (по умолчанию rectangles).
   Тесты: `tests/test_data_convert.py`, `tests/test_cli.py`.
 
-- [ ] **Генерация `dvc.yaml`** (#3)
-  `src/cv_lib/data/dvc_gen.py` + `cvlib dvc-init`. Стандартные стейджи:
-  `collect → split → train (внешний модуль) → compare-with-prev → report`.
+- [x] **Генерация `dvc.yaml`** (#3)
+  `src/cv_lib/data/dvc_gen.py` (`build_pipeline` / `generate_dvc_yaml` /
+  `generate_params_yaml` / `PipelineConfig`) + `cvlib dvc-init`. Стандартные стейджи:
+  `collect → split → train (внешний модуль) → compare-with-prev → report`; пишет
+  скаффолд `dvc.yaml` + `params.yaml`. Стейдж `split` ссылается на будущий
+  `cv_lib.data.split` (P1). Тесты: `tests/test_dvc_gen.py`, `tests/test_cli.py`.
 
 ## P1 — частые операции, которых сейчас нет
 
