@@ -18,6 +18,7 @@ dependencies = [
     # data / config
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
+    "loguru>=0.7",
     # metrics & plots
     "scikit-learn>=1.5",
     "matplotlib>=3.9",
@@ -49,6 +50,9 @@ torchvision = { index = "pytorch-cu118" }
 name = "pytorch-cu118"
 url = "https://download.pytorch.org/whl/cu118"
 explicit = true
+
+[project.scripts]
+cvlib = "cv_lib.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

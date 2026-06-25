@@ -28,6 +28,8 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from loguru import logger
+
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 import cv2
@@ -36,6 +38,11 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cv_lib.data import class_names_from_yaml
+
+
+def _setup_logging(verbose: bool) -> None:
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG" if verbose else "INFO", format="{level}: {message}")
 
 _EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp")
 
@@ -107,7 +114,10 @@ def main() -> None:
         "--imgsz", type=int, default=640,
         help="Inference image size (default: 640).",
     )
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
+
+    _setup_logging(args.verbose)
 
     if not args.save_labels and not args.save_vis:
         parser.error("Specify at least one of --save-labels or --save-vis.")
@@ -127,7 +137,7 @@ def main() -> None:
     images_path = Path(args.images)
     image_files = _collect_images(images_path)
     if not image_files:
-        print(f"No images found in {images_path}")
+        logger.error("No images found in {}", images_path)
         return
 
     out_dir = Path(args.out_dir)
@@ -142,13 +152,13 @@ def main() -> None:
         "conf": args.conf,
         "iou": args.iou,
         "imgsz": args.imgsz,
-        "verbose": False,
+        "verbose": args.verbose,
         "stream": True,
     }
     if args.device is not None:
         predict_kwargs["device"] = args.device
 
-    print(f"Running inference on {len(image_files)} image(s) → {out_dir}")
+    logger.info("Running inference on {} image(s) → {}", len(image_files), out_dir)
 
     n_total = len(image_files)
     n_boxes = 0
@@ -185,20 +195,20 @@ def main() -> None:
         if args.save_vis:
             img_bgr = cv2.imread(str(img_path))
             if img_bgr is None:
-                print(f"  Warning: could not read {img_path}, skipping vis.")
+                logger.warning("Could not read {}, skipping vis.", img_path)
             else:
                 vis = _draw_predictions(img_bgr, boxes_xyxy, class_ids, confs, class_names)
                 vis_out = vis_dir / img_path.name
                 cv2.imwrite(str(vis_out), vis)
 
         if (i + 1) % 50 == 0 or (i + 1) == n_total:
-            print(f"  {i + 1}/{n_total} done")
+            logger.info("{}/{} done", i + 1, n_total)
 
-    print(f"\nDone. {n_total} images, {n_boxes} total detections.")
+    logger.info("Done. {} images, {} total detections.", n_total, n_boxes)
     if args.save_labels:
-        print(f"  Labels → {labels_dir}")
+        logger.info("Labels → {}", labels_dir)
     if args.save_vis:
-        print(f"  Images → {vis_dir}")
+        logger.info("Images → {}", vis_dir)
 
 
 if __name__ == "__main__":
