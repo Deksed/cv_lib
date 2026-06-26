@@ -107,7 +107,7 @@ def test_coco_json_yolo_coords(tmp_path: Path):
     # cat bbox [40,30,80,60] in 400×300
     # cx=(40+40)/400=0.2, cy=(30+30)/300=0.2, w=80/400=0.2, h=60/300=0.2
     cat_idx = name_map["cat"]
-    cat_line = next(l for l in lines if l.startswith(str(cat_idx)))
+    cat_line = next(ln for ln in lines if ln.startswith(str(cat_idx)))
     parts = cat_line.split()
     assert abs(float(parts[1]) - 0.2) < 1e-4
     assert abs(float(parts[2]) - 0.2) < 1e-4

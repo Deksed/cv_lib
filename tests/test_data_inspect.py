@@ -15,7 +15,8 @@ from cv_lib.data.inspect import inspect_dataset
 def dataset(tmp_path: Path):
     img_dir = tmp_path / "images"
     lbl_dir = tmp_path / "labels"
-    img_dir.mkdir(); lbl_dir.mkdir()
+    img_dir.mkdir()
+    lbl_dir.mkdir()
 
     # valid image + label
     img = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -72,7 +73,8 @@ def test_class_counts(dataset):
 def test_infer_labels_dir(tmp_path: Path):
     img_dir = tmp_path / "images" / "val"
     lbl_dir = tmp_path / "labels" / "val"
-    img_dir.mkdir(parents=True); lbl_dir.mkdir(parents=True)
+    img_dir.mkdir(parents=True)
+    lbl_dir.mkdir(parents=True)
     img = np.zeros((50, 50, 3), dtype=np.uint8)
     cv2.imwrite(str(img_dir / "x.png"), img)
     (lbl_dir / "x.txt").write_text("0 0.5 0.5 0.3 0.3\n")
