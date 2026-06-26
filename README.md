@@ -1,5 +1,7 @@
 # cv-lib
 
+[![CI](https://github.com/Deksed/cv_lib/actions/workflows/ci.yml/badge.svg)](https://github.com/Deksed/cv_lib/actions/workflows/ci.yml)
+
 CV utility library for iterating on object detection models.
 
 **Stack:** Ultralytics (YOLO) · PyTorch · OpenCV · Albumentations

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref (e.g. force-pushes to a PR).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # OpenCV (non-headless opencv-python) needs libGL / glib at import time.
+      - name: Install system libs for OpenCV
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+
+      # setup-uv with python-version provisions Python and creates/activates a
+      # .venv (exports VIRTUAL_ENV), so the uv pip steps below install into it.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      # The project pins torch to the cu118 index for GPU machines; CI has no GPU,
+      # so install the CPU wheels first. `uv pip install -e ".[dev]"` then sees torch
+      # already satisfied (it is not a base/dev dependency) and leaves it untouched.
+      - name: Install CPU torch
+        run: uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install package (dev extra)
+        run: uv pip install -e ".[dev]"
+
+      # --no-project: run in the venv above without re-syncing from uv.lock
+      # (which would pull the cu118 torch build).
+      - name: Ruff
+        run: uv run --no-project ruff check src/ scripts/
+
+      - name: Pytest
+        run: uv run --no-project python -m pytest
