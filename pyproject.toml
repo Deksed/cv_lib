@@ -57,6 +57,10 @@ explicit = true
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Ship the PEP 561 marker so downstream type checkers honour our inline hints.
+[tool.setuptools.package-data]
+cv_lib = ["py.typed"]
+
 # ---------------------------------------------------------------------------
 # Ruff — linter + formatter
 # ---------------------------------------------------------------------------
