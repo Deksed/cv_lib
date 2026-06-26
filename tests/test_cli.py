@@ -33,6 +33,7 @@ def _minimal_args(name: str) -> list[str]:
         "dvc-init": ["dvc-init"],
         "split": ["split", "imgs/", "--out", "ds/"],
         "distribution": ["distribution", "labels/"],
+        "augment": ["augment", "img.jpg"],
     }[name]
 
 
@@ -172,6 +173,26 @@ def test_distribution_end_to_end(tmp_path: Path, capsys):
     printed = capsys.readouterr().out
     assert "car" in printed and "person" in printed
     assert "TOTAL" in printed
+
+
+def test_augment_end_to_end(tmp_path: Path, capsys):
+    import cv2
+    import numpy as np
+
+    img = tmp_path / "frame.jpg"
+    cv2.imwrite(str(img), np.zeros((80, 80, 3), dtype=np.uint8))
+    (tmp_path / "frame.txt").write_text("0 0.5 0.5 0.4 0.3\n")  # sibling label, auto-detected
+    out = tmp_path / "aug.png"
+
+    code = main(["augment", str(img), "--names", "car", "-n", "3", "--out", str(out)])
+    assert code == 0
+    assert out.exists()
+    assert "Saved augmentation preview" in capsys.readouterr().out
+
+
+def test_augment_missing_image_exits(tmp_path: Path):
+    with pytest.raises(SystemExit):
+        main(["augment", str(tmp_path / "nope.jpg")])
 
 
 def test_split_end_to_end(tmp_path: Path):

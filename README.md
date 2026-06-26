@@ -81,7 +81,7 @@ cv_lib.__version__                       # "0.1.0"
 from cv_lib import (
     # viz
     compare_gt_pred, load_yolo_gt, show_batch, find_errors, render_errors, ErrorEntry,
-    plot_class_distribution,
+    plot_class_distribution, augment_preview, default_transform,
     # data
     load_dataset_yaml, class_names_from_yaml, iter_image_label_pairs,
     class_distribution, data_root,
@@ -130,12 +130,13 @@ cp .env.example .env
 ```
 cv_lib/
 ├── src/cv_lib/
-│   ├── cli/                # cvlib CLI: inspect/convert/split/distribution/compare/infer/eval/bench/compare-runs/dvc-init
+│   ├── cli/                # cvlib CLI: inspect/convert/split/distribution/augment/compare/infer/eval/bench/compare-runs/dvc-init
 │   ├── viz/
 │   │   ├── compare.py      # GT vs prediction side-by-side
 │   │   ├── batch.py        # show_batch() — грид изображений с боксами
 │   │   ├── errors.py       # find_errors() / render_errors() — FP/FN тайлы
-│   │   └── distribution.py # plot_class_distribution() — бар-чарт частоты классов
+│   │   ├── distribution.py # plot_class_distribution() — бар-чарт частоты классов
+│   │   └── augment.py      # augment_preview() — original-vs-aug грид (боксы пересчитываются)
 │   ├── data/
 │   │   ├── __init__.py     # YOLO-формат, class distribution, iter pairs
 │   │   ├── inspect.py      # проверка датасета: битые, пропущенные, OOB
@@ -151,7 +152,7 @@ cv_lib/
 │   ├── eval.py             # model.val() → mAP-таблица + confusion matrix PNG
 │   ├── batch_infer.py      # батч-инференс → YOLO-лейблы и/или изображения
 │   └── compare_gt_pred.py  # CLI-обёртка над viz.compare
-├── tests/                  # 71 тест, pytest
+├── tests/                  # 82 теста, pytest
 ├── notebooks/
 ├── configs/
 ├── .env.example
@@ -176,6 +177,7 @@ cvlib <command> --help
 | `cvlib convert` | CVAT XML / COCO JSON / CVAT CSV → YOLO `.txt` |
 | `cvlib split` | train/val/test split YOLO-датасета + генерация `data.yaml` |
 | `cvlib distribution` | бар-чарт частоты классов (сравнение train/val/test) |
+| `cvlib augment` | превью аугментаций: original vs N вариантов (боксы пересчитываются) |
 | `cvlib cvat-query` | поиск/фильтрация по CVAT CSV (label/task/assignee/image) |
 | `cvlib compare` | GT vs prediction side-by-side для одного изображения |
 | `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения |
@@ -194,6 +196,7 @@ cvlib convert cvat_export.csv --out labels/          # CVAT CSV → YOLO
 cvlib cvat-query cvat_export.csv --label car --assignee anna --count
 cvlib split dataset/images --out dataset_split --names car person   # train/val/test + data.yaml
 cvlib distribution dataset_split --out class_dist.png              # частота классов по сплитам
+cvlib augment img.jpg --labels img.txt --names car person --out aug.png   # превью аугментаций
 cvlib eval --model runs/train/best.pt --data dataset/data.yaml
 cvlib bench --model best.pt --imgsz 320 640 1280
 cvlib dvc-init                                       # → dvc.yaml + params.yaml
@@ -352,6 +355,44 @@ fig = plot_class_distribution(
 `num_classes` и имена выводятся из лейблов, если не заданы. Возвращает `Figure`
 (в ноутбуке отображается сам, в скрипте — `fig.savefig(...)`).
 
+#### `augment_preview()` / `default_transform()`
+
+Превью `albumentations`-пайплайна на одном изображении: `original` плюс `N`
+аугментированных вариантов, тайлами в грид. Боксы трансформируются вместе с
+пикселями (`BboxParams(format="yolo")`) и пересчитываются на каждом тайле — удобно
+убедиться, что геометрические преобразования не «теряют» аннотации, **до** того как
+пайплайн уйдёт в обучение.
+
+```python
+import numpy as np
+from cv_lib.viz.augment import augment_preview, default_transform
+
+boxes = np.array([[0, 0.5, 0.5, 0.4, 0.3]])   # [class_id, cx, cy, w, h] (YOLO-norm)
+
+# Дефолтный пайплайн (flip + photometric + affine):
+grid = augment_preview(
+    "frame.jpg", boxes,
+    class_names=["car", "person"],
+    n=8,                       # число вариантов (original показывается первым)
+    seed=42,                   # вариант i использует seed+i → детерминированно
+    output_path="aug.png",
+)  # → np.ndarray (BGR, uint8)
+
+# Свой пайплайн (при боксах обязан нести bbox_params):
+import albumentations as A
+my = A.Compose(
+    [A.RandomScale(p=1.0), A.RandomBrightnessContrast(p=1.0)],
+    bbox_params=A.BboxParams(format="yolo", label_fields=["class_labels"]),
+)
+grid = augment_preview("frame.jpg", boxes, transform=my, show=False)
+```
+
+`image` принимает путь, BGR `np.ndarray` (H×W×C) или float `torch.Tensor` (C×H×W).
+Без `boxes_yolo` работает на неразмеченном изображении. `default_transform()` уже
+содержит `bbox_params` (боксы, видимые <20% после трансформа, отбрасываются).
+Детерминизм обеспечивается через `transform.set_random_seed(seed+i)` (albumentations
+≥1.4.21), с фолбэком на глобальные RNG для старых версий.
+
 ---
 
 ### `cv_lib.data`
@@ -475,5 +516,6 @@ uv run --extra dev pytest
 uv run --extra dev pytest --cov=cv_lib --cov-report=term-missing
 ```
 
-71 тест, покрывают `data.inspect`, `data.convert`, `data.split`, `data.dvc_gen`,
-`viz.batch`, `viz.errors`, `viz.distribution`, публичный API (`cv_lib.__all__`) и CLI (`cvlib`).
+82 теста, покрывают `data.inspect`, `data.convert`, `data.split`, `data.dvc_gen`,
+`viz.batch`, `viz.errors`, `viz.distribution`, `viz.augment`, публичный API
+(`cv_lib.__all__`) и CLI (`cvlib`).

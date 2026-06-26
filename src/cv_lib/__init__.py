@@ -31,6 +31,8 @@ _EXPORTS: dict[str, str] = {
     "render_errors": "cv_lib.viz",
     "ErrorEntry": "cv_lib.viz",
     "plot_class_distribution": "cv_lib.viz",
+    "augment_preview": "cv_lib.viz",
+    "default_transform": "cv_lib.viz",
     # data
     "load_dataset_yaml": "cv_lib.data",
     "class_names_from_yaml": "cv_lib.data",
@@ -112,7 +114,9 @@ if TYPE_CHECKING:
     from cv_lib.train import set_seeds, train  # noqa: F401
     from cv_lib.viz import (  # noqa: F401
         ErrorEntry,
+        augment_preview,
         compare_gt_pred,
+        default_transform,
         find_errors,
         load_yolo_gt,
         plot_class_distribution,

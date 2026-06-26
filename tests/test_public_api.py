@@ -13,6 +13,8 @@ EXPECTED_EXPORTS = {
     "render_errors",
     "ErrorEntry",
     "plot_class_distribution",
+    "augment_preview",
+    "default_transform",
     "load_dataset_yaml",
     "class_names_from_yaml",
     "iter_image_label_pairs",
