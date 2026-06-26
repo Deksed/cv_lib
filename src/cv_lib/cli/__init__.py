@@ -11,6 +11,7 @@ import argparse
 
 from cv_lib import __version__
 from cv_lib.cli import (
+    _augment,
     _bench,
     _compare,
     _compare_runs,
@@ -39,6 +40,7 @@ COMMANDS = {
     "dvc-init": _dvc_init,
     "split": _split,
     "distribution": _distribution,
+    "augment": _augment,
 }
 
 

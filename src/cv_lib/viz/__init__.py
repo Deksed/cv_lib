@@ -1,3 +1,4 @@
+from cv_lib.viz.augment import augment_preview, default_transform
 from cv_lib.viz.batch import show_batch
 from cv_lib.viz.compare import compare_gt_pred, load_yolo_gt
 from cv_lib.viz.distribution import plot_class_distribution
@@ -11,4 +12,6 @@ __all__ = [
     "render_errors",
     "ErrorEntry",
     "plot_class_distribution",
+    "augment_preview",
+    "default_transform",
 ]

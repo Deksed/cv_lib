@@ -13,8 +13,8 @@ dependencies = [
     "opencv-python>=4.10",
     "numpy>=1.26",
     # torch + torchvision устанавливаются отдельно через requirements-torch.txt
-    # augmentations
-    "albumentations>=1.4",
+    # augmentations (>=1.4.21 carries its own RNG via set_random_seed)
+    "albumentations>=1.4.21",
     # data / config
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
