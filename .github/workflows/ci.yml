@@ -20,13 +20,12 @@ jobs:
       - name: Install system libs for OpenCV
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
 
+      # setup-uv with python-version provisions Python and creates/activates a
+      # .venv (exports VIRTUAL_ENV), so the uv pip steps below install into it.
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-
-      - name: Create virtualenv
-        run: uv venv --python 3.12
 
       # The project pins torch to the cu118 index for GPU machines; CI has no GPU,
       # so install the CPU wheels first. `uv pip install -e ".[dev]"` then sees torch
