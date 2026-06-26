@@ -40,7 +40,7 @@ anything not listed is internal. **When adding a public function, register it in
 ## CLI
 
 Single entry point `cvlib` (`[project.scripts]` → `cv_lib.cli:main`):
-`cvlib inspect|convert|cvat-query|split|distribution|compare|infer|eval|bench|compare-runs|dvc-init`.
+`cvlib inspect|convert|cvat-query|split|distribution|compare|infer|eval|export|bench|compare-runs|dvc-init`.
 
 Add a subcommand: create `cv_lib/cli/_<name>.py` with `HELP` / `add_arguments(parser)`
 / `run(args)` (opt. `EPILOG`) and register it in `COMMANDS` in `cli/__init__.py`.

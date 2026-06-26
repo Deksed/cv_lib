@@ -28,6 +28,7 @@ def _minimal_args(name: str) -> list[str]:
         "compare": ["compare", "img.jpg", "--model", "m.pt", "--names", "car"],
         "infer": ["infer", "--model", "m.pt", "--images", "imgs/"],
         "eval": ["eval", "--model", "m.pt", "--data", "d.yaml"],
+        "export": ["export", "m.pt"],
         "bench": ["bench", "--model", "m.pt"],
         "compare-runs": ["compare-runs", "runs/exp1"],
         "dvc-init": ["dvc-init"],
