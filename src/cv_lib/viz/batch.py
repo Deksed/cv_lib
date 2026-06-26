@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 
+if TYPE_CHECKING:
+    import torch
 
-def _to_bgr_uint8(img: "np.ndarray | torch.Tensor") -> np.ndarray:
+
+def _to_bgr_uint8(img: np.ndarray | torch.Tensor) -> np.ndarray:
     """Accept H×W×C uint8 BGR ndarray or C×H×W float Tensor, return H×W×C uint8 BGR."""
     try:
         import torch
@@ -56,7 +60,7 @@ def _draw_boxes_on(
 
 
 def show_batch(
-    images: "list[np.ndarray | torch.Tensor | str | Path]",
+    images: list[np.ndarray | torch.Tensor | str | Path],
     labels: list[np.ndarray] | None = None,
     class_names: list[str] | None = None,
     tile_size: tuple[int, int] = (320, 320),

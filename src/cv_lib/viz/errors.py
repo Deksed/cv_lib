@@ -3,7 +3,7 @@ and worst-confidence predictions across a dataset."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -21,8 +21,10 @@ class ErrorEntry:
 
 def _iou(a: np.ndarray, b: np.ndarray) -> float:
     """IoU between two boxes in xyxy format."""
-    ix1 = max(a[0], b[0]); iy1 = max(a[1], b[1])
-    ix2 = min(a[2], b[2]); iy2 = min(a[3], b[3])
+    ix1 = max(a[0], b[0])
+    iy1 = max(a[1], b[1])
+    ix2 = min(a[2], b[2])
+    iy2 = min(a[3], b[3])
     inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
     if inter == 0:
         return 0.0
@@ -118,9 +120,13 @@ def find_errors(
                     conf = float(parts[5]) if len(parts) >= 6 else 1.0
                     if conf < conf_threshold:
                         continue
-                    x1 = (cx - bw / 2) * w; y1 = (cy - bh / 2) * h
-                    x2 = (cx + bw / 2) * w; y2 = (cy + bh / 2) * h
-                    pb.append([x1, y1, x2, y2]); pc.append(cid); pconf.append(conf)
+                    x1 = (cx - bw / 2) * w
+                    y1 = (cy - bh / 2) * h
+                    x2 = (cx + bw / 2) * w
+                    y2 = (cy + bh / 2) * h
+                    pb.append([x1, y1, x2, y2])
+                    pc.append(cid)
+                    pconf.append(conf)
                 pred_boxes = np.array(pb, dtype=np.float32) if pb else np.zeros((0, 4), dtype=np.float32)
                 pred_cls = np.array(pc, dtype=int)
                 pred_conf = np.array(pconf, dtype=np.float32)
