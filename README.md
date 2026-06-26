@@ -132,7 +132,7 @@ cp .env.example .env
 ```
 cv_lib/
 ├── src/cv_lib/
-│   ├── cli/                # cvlib CLI: inspect/convert/split/distribution/augment/compare/infer/eval/bench/compare-runs/dvc-init
+│   ├── cli/                # cvlib CLI: inspect/convert/split/distribution/augment/compare/infer/eval/export/bench/compare-runs/dvc-init
 │   ├── viz/
 │   │   ├── compare.py      # GT vs prediction side-by-side
 │   │   ├── batch.py        # show_batch() — грид изображений с боксами
@@ -184,6 +184,7 @@ cvlib <command> --help
 | `cvlib compare` | GT vs prediction side-by-side для одного изображения |
 | `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения |
 | `cvlib eval`    | `model.val()` → mAP-таблица + confusion matrix |
+| `cvlib export`  | экспорт YOLO `.pt` → ONNX (или сборка TensorRT `.engine`) |
 | `cvlib bench`   | sanity-check + бенчмарк латентности/FPS |
 | `cvlib compare-runs` | сравнение train-прогонов: конфиги + лучшие метрики |
 | `cvlib dvc-init` | генерация `dvc.yaml` (+ `params.yaml`) — DVC-пайплайн train/eval |
@@ -200,6 +201,7 @@ cvlib split dataset/images --out dataset_split --names car person   # train/val/
 cvlib distribution dataset_split --out class_dist.png              # частота классов по сплитам
 cvlib augment img.jpg --labels img.txt --names car person --out aug.png   # превью аугментаций
 cvlib eval --model runs/train/best.pt --data dataset/data.yaml
+cvlib export runs/train/best.pt --format onnx --imgsz 640        # → best.onnx
 cvlib bench --model best.pt --imgsz 320 640 1280
 cvlib dvc-init                                       # → dvc.yaml + params.yaml
 ```
