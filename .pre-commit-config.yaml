@@ -1,0 +1,16 @@
+# Local quality gate: runs ruff lint on staged files before each commit.
+# The build/test pipeline lives outside this repo, so this is the in-repo guard.
+#
+# Setup:  uv run pre-commit install   (then it runs automatically on `git commit`)
+# Manual: uv run pre-commit run --all-files
+#
+# Only the lint hook is enabled (matching the project's `ruff check` gate);
+# `ruff format` is intentionally omitted — the codebase is not ruff-formatted.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.19  # keep in sync with the ruff pin in [project.optional-dependencies].dev
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        args: [--fix]
+        exclude: ^notebooks/  # notebooks are outside the lint gate (src/ scripts/ tests/)

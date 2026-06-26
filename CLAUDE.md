@@ -62,8 +62,8 @@ pip install -r requirements-torch.txt && pip install -e ".[dev]"
 ```
 
 CUDA 12.4+ / Python 3.13 → install cu124 torch manually and drop `<3.13` from
-`requires-python`. Lint: `ruff check src/ scripts/`. Tests: `uv run --extra dev pytest`.
-Build wheel: `uv build`.
+`requires-python`. Lint: `ruff check src/ scripts/ tests/`. Tests: `uv run --extra dev pytest`.
+Build wheel: `uv build`. Local gate: `uv run pre-commit install` (runs ruff on commit).
 
 ## Data & Annotations
 
