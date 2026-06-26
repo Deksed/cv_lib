@@ -12,28 +12,29 @@ Returns an ``np.ndarray`` (BGR, uint8) like the other ``viz`` helpers. A custom
 
 from __future__ import annotations
 
-import random
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 
-from cv_lib.viz.batch import _display, _draw_boxes_on, _to_bgr_uint8
+from cv_lib.viz._utils import assemble_grid, display, draw_boxes_on, to_bgr_uint8
 
 if TYPE_CHECKING:
     import albumentations as A
+    import torch
 
 
 def default_transform(seed: int | None = None) -> A.Compose:
     """A general-purpose preview pipeline (flip + photometric + affine).
 
     Geometric ops use a YOLO ``BboxParams`` so boxes are remapped and clipped;
-    boxes left <20% visible after a transform are dropped.
+    boxes left <20% visible after a transform are dropped. When ``seed`` is given
+    the returned pipeline is seeded deterministically.
     """
     import albumentations as A
 
-    return A.Compose(
+    transform = A.Compose(
         [
             A.HorizontalFlip(p=0.5),
             A.RandomBrightnessContrast(p=0.5),
@@ -49,21 +50,19 @@ def default_transform(seed: int | None = None) -> A.Compose:
             format="yolo", label_fields=["class_labels"], min_visibility=0.2
         ),
     )
+    if seed is not None:
+        _seed_transform(transform, seed)
+    return transform
 
 
 def _seed_transform(transform: A.Compose, seed: int) -> None:
     """Seed an albumentations pipeline deterministically.
 
-    albumentations >=1.4.21 carries its own RNG, so seeding the global
-    ``random``/``numpy`` generators no longer affects it — it exposes
-    ``set_random_seed`` instead. Fall back to the global RNGs on older versions.
+    albumentations >=1.4.21 (pinned in ``pyproject.toml``) carries its own RNG
+    and exposes ``set_random_seed``, so we no longer touch the process-global
+    ``random``/``numpy`` generators.
     """
-    setter = getattr(transform, "set_random_seed", None)
-    if setter is not None:
-        setter(seed)
-    else:  # albumentations < 1.4.21
-        random.seed(seed)
-        np.random.seed(seed)
+    transform.set_random_seed(seed)
 
 
 def _caption(tile: np.ndarray, text: str) -> None:
@@ -75,7 +74,7 @@ def _caption(tile: np.ndarray, text: str) -> None:
 
 
 def augment_preview(
-    image: Any,
+    image: str | Path | np.ndarray | torch.Tensor,
     boxes_yolo: np.ndarray | None = None,
     *,
     transform: A.Compose | None = None,
@@ -107,12 +106,15 @@ def augment_preview(
     Returns:
         The grid as an ``np.ndarray`` (BGR, uint8).
     """
+    if cols < 1:
+        raise ValueError(f"cols must be >= 1, got {cols}")
+
     if isinstance(image, (str, Path)):
         bgr = cv2.imread(str(image))
         if bgr is None:
             raise FileNotFoundError(f"Cannot read image: {image}")
     else:
-        bgr = _to_bgr_uint8(image)
+        bgr = to_bgr_uint8(image)
 
     class_names = class_names or []
     transform = transform or default_transform()
@@ -127,9 +129,9 @@ def augment_preview(
     rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
     def _tile(img_bgr: np.ndarray, bxs: list, lbls: list, caption: str) -> np.ndarray:
-        drawn = img_bgr
+        drawn = img_bgr.copy()
         if bxs:
-            drawn = _draw_boxes_on(
+            drawn = draw_boxes_on(
                 img_bgr, np.asarray(bxs, dtype=float), np.asarray(lbls, dtype=int), class_names
             )
         tile = cv2.resize(drawn, tile_size)
@@ -144,15 +146,11 @@ def augment_preview(
         aug_bgr = cv2.cvtColor(out["image"], cv2.COLOR_RGB2BGR)
         tiles.append(_tile(aug_bgr, list(out["bboxes"]), list(out["class_labels"]), f"aug {i + 1}"))
 
-    tw, th = tile_size
-    rows = (len(tiles) + cols - 1) // cols
-    while len(tiles) < rows * cols:
-        tiles.append(np.zeros((th, tw, 3), dtype=np.uint8))
-    grid = np.vstack([np.hstack(tiles[r * cols : (r + 1) * cols]) for r in range(rows)])
+    grid = assemble_grid(tiles, cols, tile_size)
 
     if output_path is not None:
         cv2.imwrite(str(output_path), grid)
     if show:
-        _display(grid)
+        display(grid)
 
     return grid
