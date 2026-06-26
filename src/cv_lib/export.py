@@ -20,7 +20,8 @@ def export_onnx(
     Args:
         model:        Ultralytics YOLO instance
         path:         output .onnx file path
-        input_shape:  (B, C, H, W) — used only when dynamic=False
+        input_shape:  (B, C, H, W) — the spatial size (H == W) is passed to the
+                      exporter as imgsz; the batch/channel dims are informational
         dynamic:      export with dynamic batch / spatial axes
         simplify:     run onnx-simplifier after export
 
@@ -28,7 +29,7 @@ def export_onnx(
         Path to the exported .onnx file
     """
     path = Path(path)
-    model.export(format="onnx", dynamic=dynamic, simplify=simplify)
+    model.export(format="onnx", imgsz=input_shape[2], dynamic=dynamic, simplify=simplify)
     # Ultralytics saves next to the .pt — move if needed
     exported = Path(model.ckpt_path).with_suffix(".onnx")
     if exported != path:

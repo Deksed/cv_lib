@@ -13,7 +13,33 @@ import numpy as np
 import pytest
 
 from cv_lib.cli import main
-from cv_lib.export import validate_export
+from cv_lib.export import export_onnx, validate_export
+
+
+# --------------------------------------------------------------------------- #
+# export_onnx (argument wiring into Ultralytics model.export)
+# --------------------------------------------------------------------------- #
+def test_export_onnx_passes_imgsz_to_model(tmp_path: Path):
+    out = tmp_path / "best.onnx"
+    captured: dict = {}
+
+    class _FakeModel:
+        ckpt_path = str(tmp_path / "best.pt")
+
+        def export(self, **kwargs):
+            captured.update(kwargs)
+            # mimic Ultralytics writing the .onnx next to the .pt
+            Path(self.ckpt_path).with_suffix(".onnx").write_bytes(b"onnx")
+
+    result = export_onnx(
+        _FakeModel(), out, input_shape=(1, 3, 1280, 1280), dynamic=False, simplify=False
+    )
+
+    assert result == out
+    assert captured["imgsz"] == 1280
+    assert captured["format"] == "onnx"
+    assert captured["dynamic"] is False
+    assert captured["simplify"] is False
 
 
 # --------------------------------------------------------------------------- #
