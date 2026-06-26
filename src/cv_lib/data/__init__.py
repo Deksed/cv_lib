@@ -81,5 +81,5 @@ def data_root() -> Path:
     """Return DATA_ROOT env var as Path, raise if not set."""
     root = os.environ.get("DATA_ROOT")
     if not root:
-        raise EnvironmentError("DATA_ROOT environment variable is not set.")
+        raise OSError("DATA_ROOT environment variable is not set.")
     return Path(root)

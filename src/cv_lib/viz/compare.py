@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -40,7 +38,7 @@ def _draw_boxes(
     boxes_xyxy: np.ndarray,
     class_ids: np.ndarray,
     class_names: list[str],
-    scores: Optional[np.ndarray] = None,
+    scores: np.ndarray | None = None,
     line_thickness: int = 2,
 ) -> np.ndarray:
     """Draw bounding boxes on a copy of img. boxes_xyxy in absolute pixel coords."""
@@ -123,8 +121,8 @@ def compare_gt_pred(
     model_path: str | Path,
     class_names: list[str],
     conf_threshold: float = 0.25,
-    label_path: Optional[str | Path] = None,
-    output_path: Optional[str | Path] = None,
+    label_path: str | Path | None = None,
+    output_path: str | Path | None = None,
     show: bool = True,
 ) -> np.ndarray:
     """

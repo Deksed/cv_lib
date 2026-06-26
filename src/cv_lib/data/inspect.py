@@ -19,7 +19,7 @@ class InspectReport:
     class_names: list[str] = field(default_factory=list)
 
     def print(self) -> None:
-        print(f"\nDataset inspection report")
+        print("\nDataset inspection report")
         print("=" * 50)
         print(f"  Total images      : {self.images_total}")
         print(f"  Corrupt images    : {len(self.corrupt_images)}")

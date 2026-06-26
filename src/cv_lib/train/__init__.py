@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import ultralytics
 
 
 def set_seeds(seed: int = 42) -> None:
@@ -36,7 +40,7 @@ def train(
     name: str = "exp",
     device: str | None = None,
     **kwargs,
-) -> "ultralytics.engine.results.Results":
+) -> ultralytics.engine.results.Results:
     """
     Train a YOLO model with reproducible seeds and config snapshot.
 
