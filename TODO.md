@@ -101,6 +101,10 @@ CVAT CSV → YOLO + `cvat-query`, генерация `dvc.yaml`.
 **P2:** CI workflow (ruff + pytest), покрытие тестами core-модулей, pre-commit, notebook-примеры.
 **P3:** `__version__` + `cvlib --version`, структурное логирование (loguru/`--verbose`),
 сравнение прогонов (`compare-runs`).
+**Daily-ops:** tiled inference, remap/qa/dedup/crops, per-class метрики + PR-кривые,
+threshold sweep, кросс-форматный бенч, autolabel, mining, YOLO→COCO/VOC.
+**Асимметрии:** `cvlib train` (CLI к `train()`), VOC→YOLO импорт, `cvlib merge`
+(слияние датасетов), `cvlib fix` (`repair_labels` — клип/дроп невалидных боксов).
 
 ---
 

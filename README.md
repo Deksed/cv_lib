@@ -157,7 +157,7 @@ cp .env.example .env
 ```
 cv_lib/
 ├── src/cv_lib/
-│   ├── cli/                # cvlib CLI: inspect/convert/split/distribution/augment/remap/qa/dedup/crops/cvat-query/compare/infer/autolabel/mine/eval/threshold/export/bench/compare-runs/dvc-init
+│   ├── cli/                # cvlib CLI: inspect/fix/convert/split/merge/distribution/augment/remap/qa/dedup/crops/cvat-query/compare/infer/autolabel/mine/train/eval/threshold/export/bench/compare-runs/dvc-init
 │   ├── viz/
 │   │   ├── compare.py      # GT vs prediction side-by-side
 │   │   ├── batch.py        # show_batch() — грид изображений с боксами
@@ -167,8 +167,10 @@ cv_lib/
 │   ├── data/
 │   │   ├── __init__.py     # YOLO-формат, class distribution, iter pairs
 │   │   ├── inspect.py      # проверка датасета: битые, пропущенные, OOB
-│   │   ├── convert.py      # CVAT/COCO/CSV → YOLO txt и YOLO → COCO/VOC
+│   │   ├── convert.py      # CVAT/COCO/CSV/VOC → YOLO txt и YOLO → COCO/VOC
 │   │   ├── split.py        # train/val/test split + data.yaml (стратификация)
+│   │   ├── merge.py        # merge_datasets() — слить датасеты с выравниванием классов
+│   │   ├── repair.py       # repair_labels() — авто-починка боксов (клип/дроп)
 │   │   ├── remap.py        # remap_labels() — слить/переименовать/выкинуть классы
 │   │   ├── qa.py           # audit_labels() — аномалии разметки
 │   │   ├── dedup.py        # near-duplicate (pHash) + data-leakage между сплитами
@@ -188,7 +190,7 @@ cv_lib/
 │   ├── eval.py             # model.val() → mAP-таблица + confusion matrix PNG
 │   ├── batch_infer.py      # батч-инференс → YOLO-лейблы и/или изображения
 │   └── compare_gt_pred.py  # CLI-обёртка над viz.compare
-├── tests/                  # 154 теста, pytest
+├── tests/                  # 165 тестов, pytest
 ├── notebooks/
 ├── configs/
 ├── .env.example
@@ -211,8 +213,10 @@ cvlib <command> --help
 | Команда | Назначение |
 |---|---|
 | `cvlib inspect` | health-check датасета (битые/пропущенные/невалидные боксы) |
-| `cvlib convert` | CVAT XML / COCO JSON / CVAT CSV ↔ YOLO `.txt` (+ YOLO → COCO/VOC через `--to`) |
+| `cvlib fix` | авто-починка лейблов: клип боксов за границы, дроп невалидных |
+| `cvlib convert` | CVAT XML / COCO JSON / CVAT CSV / VOC ↔ YOLO `.txt` (+ YOLO → COCO/VOC через `--to`) |
 | `cvlib split` | train/val/test split YOLO-датасета + генерация `data.yaml` |
+| `cvlib merge` | слить несколько YOLO-датасетов в один (выравнивание классов по имени) |
 | `cvlib distribution` | бар-чарт частоты классов (сравнение train/val/test) |
 | `cvlib augment` | превью аугментаций: original vs N вариантов (боксы пересчитываются) |
 | `cvlib remap` | слить/переименовать/выкинуть классы в YOLO-лейблах (+ rewrite `data.yaml`) |
@@ -224,6 +228,7 @@ cvlib <command> --help
 | `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения (`--tiled` для крупных кадров) |
 | `cvlib autolabel` | авто-предразметка модели → YOLO `.txt` черновики для CVAT |
 | `cvlib mine` | ранжирование неразмеченных по неуверенности (active-learning очередь) |
+| `cvlib train`   | обучение YOLO с сидами + снапшотом `train_config.json` |
 | `cvlib eval`    | `model.val()` → mAP-таблица + confusion matrix (`--per-class` для разбивки) |
 | `cvlib threshold` | sweep confidence → рекомендованная рабочая точка (F1/P/R) |
 | `cvlib export`  | экспорт YOLO `.pt` → ONNX (или сборка TensorRT `.engine`) |
@@ -239,10 +244,14 @@ cvlib inspect dataset/images/val --data dataset/data.yaml
 cvlib convert annotations.xml --out labels/ --names car person
 cvlib convert cvat_export.csv --out labels/          # CVAT CSV → YOLO
 cvlib cvat-query cvat_export.csv --label car --assignee anna --count
+cvlib convert voc_xml/ --format voc --out labels/ --names car person   # Pascal VOC → YOLO
+cvlib fix dataset/labels/train --num-classes 5 --out fixed/        # клип/дроп невалидных боксов
 cvlib split dataset/images --out dataset_split --names car person   # train/val/test + data.yaml
+cvlib merge dsA dsB dsC --out merged                              # слить датасеты (классы по имени)
 cvlib distribution dataset_split --out class_dist.png              # частота классов по сплитам
 cvlib augment img.jpg --labels img.txt --names car person --out aug.png   # превью аугментаций
 cvlib remap labels/ --map 2=0 3=0 --drop 5 --out remapped/        # слить/выкинуть классы
+cvlib train --model yolov8n.pt --data dataset/data.yaml --epochs 100    # обучение + снапшот конфига
 cvlib qa dataset_split/labels/train                               # аудит подозрительной разметки
 cvlib dedup dataset_split --leakage                               # утечки между сплитами
 cvlib crops dataset/images --labels dataset/labels --out crops/   # кропы объектов по классам
