@@ -82,6 +82,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--imgsz", type=int, default=640,
         help="Inference image size (default: 640).",
     )
+    parser.add_argument(
+        "--tiled", action="store_true",
+        help="Sliced inference: split each image into overlapping tiles (small objects).",
+    )
+    parser.add_argument("--tile", type=int, default=640, help="Tile size for --tiled (default: 640).")
+    parser.add_argument(
+        "--overlap", type=float, default=0.2, help="Tile overlap fraction for --tiled (default: 0.2)."
+    )
     add_verbose(parser)
 
 
@@ -127,51 +135,67 @@ def run(args: argparse.Namespace) -> None:
     if args.device is not None:
         predict_kwargs["device"] = args.device
 
-    logger.info("Running inference on {} image(s) → {}", len(image_files), out_dir)
+    mode = "tiled" if args.tiled else "batch"
+    logger.info("Running {} inference on {} image(s) → {}", mode, len(image_files), out_dir)
 
     n_total = len(image_files)
     n_boxes = 0
 
-    for i, (img_path, result) in enumerate(
-        zip(image_files, model.predict(source=[str(p) for p in image_files], **predict_kwargs))
-    ):
-        boxes = result.boxes
-        h, w = result.orig_shape
-
-        if boxes is not None and len(boxes):
-            boxes_xyxy = boxes.xyxy.cpu().numpy()
-            class_ids = boxes.cls.cpu().numpy().astype(int)
-            confs = boxes.conf.cpu().numpy()
-            n_boxes += len(boxes_xyxy)
-        else:
-            boxes_xyxy = np.zeros((0, 4), dtype=np.float32)
-            class_ids = np.zeros(0, dtype=int)
-            confs = np.zeros(0, dtype=np.float32)
-
-        # --- YOLO labels ---
+    def _save(img_path: Path, boxes_xyxy, class_ids, confs, w: int, h: int) -> None:
         if args.save_labels:
             label_out = labels_dir / f"{img_path.stem}.txt"
             if len(boxes_xyxy):
                 yolo_coords = _boxes_to_yolo(boxes_xyxy, w, h)
-                lines = []
-                for cid, (cx, cy, bw, bh), conf in zip(class_ids, yolo_coords, confs):
-                    lines.append(f"{cid} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f} {conf:.4f}")
+                lines = [
+                    f"{cid} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f} {conf:.4f}"
+                    for cid, (cx, cy, bw, bh), conf in zip(class_ids, yolo_coords, confs)
+                ]
                 label_out.write_text("\n".join(lines))
             else:
                 label_out.write_text("")
-
-        # --- visualized image ---
         if args.save_vis:
             img_bgr = cv2.imread(str(img_path))
             if img_bgr is None:
                 logger.warning("Could not read {}, skipping vis.", img_path)
             else:
                 vis = _draw_predictions(img_bgr, boxes_xyxy, class_ids, confs, class_names)
-                vis_out = vis_dir / img_path.name
-                cv2.imwrite(str(vis_out), vis)
+                cv2.imwrite(str(vis_dir / img_path.name), vis)
 
-        if (i + 1) % 50 == 0 or (i + 1) == n_total:
-            logger.info("{}/{} done", i + 1, n_total)
+    if args.tiled:
+        from cv_lib.infer.tiled import sliced_predict
+
+        for i, img_path in enumerate(image_files):
+            img_bgr = cv2.imread(str(img_path))
+            if img_bgr is None:
+                logger.warning("Could not read {}, skipping.", img_path)
+                continue
+            h, w = img_bgr.shape[:2]
+            det = sliced_predict(
+                model, img_bgr, tile=args.tile, overlap=args.overlap,
+                conf=args.conf, nms_iou=args.iou, imgsz=args.imgsz, device=args.device,
+            )
+            n_boxes += len(det["boxes"])
+            _save(img_path, det["boxes"], det["classes"], det["scores"], w, h)
+            if (i + 1) % 50 == 0 or (i + 1) == n_total:
+                logger.info("{}/{} done", i + 1, n_total)
+    else:
+        for i, (img_path, result) in enumerate(
+            zip(image_files, model.predict(source=[str(p) for p in image_files], **predict_kwargs))
+        ):
+            boxes = result.boxes
+            h, w = result.orig_shape
+            if boxes is not None and len(boxes):
+                boxes_xyxy = boxes.xyxy.cpu().numpy()
+                class_ids = boxes.cls.cpu().numpy().astype(int)
+                confs = boxes.conf.cpu().numpy()
+                n_boxes += len(boxes_xyxy)
+            else:
+                boxes_xyxy = np.zeros((0, 4), dtype=np.float32)
+                class_ids = np.zeros(0, dtype=int)
+                confs = np.zeros(0, dtype=np.float32)
+            _save(img_path, boxes_xyxy, class_ids, confs, w, h)
+            if (i + 1) % 50 == 0 or (i + 1) == n_total:
+                logger.info("{}/{} done", i + 1, n_total)
 
     logger.info("Done. {} images, {} total detections.", n_total, n_boxes)
     if args.save_labels:

@@ -1,8 +1,11 @@
-"""Annotation converters: CVAT XML / COCO JSON / CVAT CSV → YOLO .txt."""
+"""Annotation converters: CVAT XML / COCO JSON / CVAT CSV → YOLO .txt, and the
+reverse YOLO → COCO JSON / Pascal VOC XML for interop and submissions."""
 
 from __future__ import annotations
 
 from pathlib import Path
+
+_IMAGE_EXTENSIONS: tuple[str, ...] = (".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp")
 
 # CVAT CSV export columns (one row per annotated instance).
 # See issue #2: a flat export with bbox corners + task/job metadata.
@@ -297,3 +300,146 @@ def query_cvat_csv(
 
     wanted = {k: str(v) for k, v in filters.items()}
     return [row for row in rows if all(row.get(k) == v for k, v in wanted.items())]
+
+
+# ---------------------------------------------------------------------------
+# YOLO txt → COCO JSON / Pascal VOC XML (reverse direction)
+# ---------------------------------------------------------------------------
+
+def _image_size(img_path: Path) -> tuple[int, int]:
+    """Return (width, height) of an image, reading the file with OpenCV."""
+    import cv2
+
+    img = cv2.imread(str(img_path))
+    if img is None:
+        raise ValueError(f"Could not read image {img_path}")
+    h, w = img.shape[:2]
+    return w, h
+
+
+def _iter_yolo_pairs(images_dir: Path, labels_dir: Path | None):
+    """Yield (image_path, label_path) pairs (label may not exist)."""
+    from cv_lib.data import iter_image_label_pairs
+
+    return iter_image_label_pairs(images_dir, labels_dir, _IMAGE_EXTENSIONS)
+
+
+def _read_yolo_boxes(label_path: Path) -> list[tuple[int, float, float, float, float]]:
+    boxes: list[tuple[int, float, float, float, float]] = []
+    if not label_path.exists():
+        return boxes
+    for line in label_path.read_text().splitlines():
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        try:
+            cid = int(float(parts[0]))
+            cx, cy, w, h = (float(v) for v in parts[1:5])
+        except ValueError:
+            continue
+        boxes.append((cid, cx, cy, w, h))
+    return boxes
+
+
+def yolo_to_coco(
+    images_dir: str | Path,
+    labels_dir: str | Path | None,
+    out_json: str | Path,
+    class_names: list[str],
+) -> dict:
+    """Convert a YOLO dataset to a single COCO-format JSON file.
+
+    Args:
+        images_dir: Directory of images.
+        labels_dir: Directory of YOLO ``.txt`` labels (inferred from
+            ``images_dir`` if ``None``).
+        out_json: Destination ``.json`` path.
+        class_names: Ordered class names (index = YOLO class id).
+
+    Returns:
+        The COCO dict that was written.
+    """
+    import json
+
+    images_dir = Path(images_dir)
+    labels_dir = Path(labels_dir) if labels_dir is not None else None
+
+    coco: dict = {
+        "images": [],
+        "annotations": [],
+        "categories": [{"id": i + 1, "name": n} for i, n in enumerate(class_names)],
+    }
+    ann_id = 1
+    for img_id, (img_path, label_path) in enumerate(_iter_yolo_pairs(images_dir, labels_dir), 1):
+        iw, ih = _image_size(img_path)
+        coco["images"].append(
+            {"id": img_id, "file_name": img_path.name, "width": iw, "height": ih}
+        )
+        for cid, cx, cy, w, h in _read_yolo_boxes(label_path):
+            bw, bh = w * iw, h * ih
+            x = (cx * iw) - bw / 2
+            y = (cy * ih) - bh / 2
+            coco["annotations"].append(
+                {
+                    "id": ann_id,
+                    "image_id": img_id,
+                    "category_id": cid + 1,  # COCO ids are 1-based
+                    "bbox": [round(x, 2), round(y, 2), round(bw, 2), round(bh, 2)],
+                    "area": round(bw * bh, 2),
+                    "iscrowd": 0,
+                }
+            )
+            ann_id += 1
+
+    out_json = Path(out_json)
+    out_json.parent.mkdir(parents=True, exist_ok=True)
+    out_json.write_text(json.dumps(coco, indent=2))
+    return coco
+
+
+def yolo_to_voc(
+    images_dir: str | Path,
+    labels_dir: str | Path | None,
+    out_dir: str | Path,
+    class_names: list[str],
+) -> int:
+    """Convert a YOLO dataset to per-image Pascal VOC XML files.
+
+    Args:
+        images_dir: Directory of images.
+        labels_dir: Directory of YOLO ``.txt`` labels (inferred if ``None``).
+        out_dir: Directory to write ``<stem>.xml`` files into.
+        class_names: Ordered class names (index = YOLO class id).
+
+    Returns:
+        Number of XML files written.
+    """
+    import xml.etree.ElementTree as ET
+
+    images_dir = Path(images_dir)
+    labels_dir = Path(labels_dir) if labels_dir is not None else None
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    written = 0
+    for img_path, label_path in _iter_yolo_pairs(images_dir, labels_dir):
+        iw, ih = _image_size(img_path)
+        ann = ET.Element("annotation")
+        ET.SubElement(ann, "filename").text = img_path.name
+        size = ET.SubElement(ann, "size")
+        ET.SubElement(size, "width").text = str(iw)
+        ET.SubElement(size, "height").text = str(ih)
+        ET.SubElement(size, "depth").text = "3"
+        for cid, cx, cy, w, h in _read_yolo_boxes(label_path):
+            bw, bh = w * iw, h * ih
+            obj = ET.SubElement(ann, "object")
+            name = class_names[cid] if 0 <= cid < len(class_names) else str(cid)
+            ET.SubElement(obj, "name").text = name
+            bnd = ET.SubElement(obj, "bndbox")
+            ET.SubElement(bnd, "xmin").text = str(max(0, int(round(cx * iw - bw / 2))))
+            ET.SubElement(bnd, "ymin").text = str(max(0, int(round(cy * ih - bh / 2))))
+            ET.SubElement(bnd, "xmax").text = str(min(iw, int(round(cx * iw + bw / 2))))
+            ET.SubElement(bnd, "ymax").text = str(min(ih, int(round(cy * ih + bh / 2))))
+        ET.ElementTree(ann).write(out_dir / f"{img_path.stem}.xml", encoding="unicode")
+        written += 1
+    return written

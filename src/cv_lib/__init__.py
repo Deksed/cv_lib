@@ -52,12 +52,37 @@ _EXPORTS: dict[str, str] = {
     "generate_dvc_yaml": "cv_lib.data.dvc_gen",
     "generate_params_yaml": "cv_lib.data.dvc_gen",
     "PipelineConfig": "cv_lib.data.dvc_gen",
+    "yolo_to_coco": "cv_lib.data.convert",
+    "yolo_to_voc": "cv_lib.data.convert",
     # data.split
     "train_val_test_split": "cv_lib.data.split",
     "SplitReport": "cv_lib.data.split",
+    # data.remap
+    "remap_labels": "cv_lib.data.remap",
+    "RemapReport": "cv_lib.data.remap",
+    # data.qa
+    "audit_labels": "cv_lib.data.qa",
+    "QAReport": "cv_lib.data.qa",
+    # data.dedup
+    "find_duplicates": "cv_lib.data.dedup",
+    "check_split_leakage": "cv_lib.data.dedup",
+    # data.crops
+    "extract_crops": "cv_lib.data.crops",
+    "CropReport": "cv_lib.data.crops",
+    # data.autolabel / mining
+    "autolabel": "cv_lib.data.autolabel",
+    "rank_for_labeling": "cv_lib.data.mining",
+    "uncertainty_score": "cv_lib.data.mining",
+    # infer
+    "sliced_predict": "cv_lib.infer.tiled",
+    "generate_tiles": "cv_lib.infer.tiled",
     # metrics
     "plot_confusion_matrix": "cv_lib.metrics",
     "summarize_map": "cv_lib.metrics",
+    "per_class_map": "cv_lib.metrics",
+    "plot_pr_curves": "cv_lib.metrics",
+    "sweep_threshold": "cv_lib.metrics.threshold",
+    "best_operating_point": "cv_lib.metrics.threshold",
     # train
     "set_seeds": "cv_lib.train",
     "train": "cv_lib.train",
@@ -95,12 +120,17 @@ if TYPE_CHECKING:
         iter_image_label_pairs,
         load_dataset_yaml,
     )
+    from cv_lib.data.autolabel import autolabel  # noqa: F401
     from cv_lib.data.convert import (  # noqa: F401
         coco_json_to_yolo,
         cvat_csv_to_yolo,
         cvat_xml_to_yolo,
         query_cvat_csv,
+        yolo_to_coco,
+        yolo_to_voc,
     )
+    from cv_lib.data.crops import CropReport, extract_crops  # noqa: F401
+    from cv_lib.data.dedup import check_split_leakage, find_duplicates  # noqa: F401
     from cv_lib.data.dvc_gen import (  # noqa: F401
         PipelineConfig,
         build_pipeline,
@@ -108,9 +138,19 @@ if TYPE_CHECKING:
         generate_params_yaml,
     )
     from cv_lib.data.inspect import InspectReport, inspect_dataset  # noqa: F401
+    from cv_lib.data.mining import rank_for_labeling, uncertainty_score  # noqa: F401
+    from cv_lib.data.qa import QAReport, audit_labels  # noqa: F401
+    from cv_lib.data.remap import RemapReport, remap_labels  # noqa: F401
     from cv_lib.data.split import SplitReport, train_val_test_split  # noqa: F401
     from cv_lib.export import export_onnx, export_trt, validate_export  # noqa: F401
-    from cv_lib.metrics import plot_confusion_matrix, summarize_map  # noqa: F401
+    from cv_lib.infer.tiled import generate_tiles, sliced_predict  # noqa: F401
+    from cv_lib.metrics import (  # noqa: F401
+        per_class_map,
+        plot_confusion_matrix,
+        plot_pr_curves,
+        summarize_map,
+    )
+    from cv_lib.metrics.threshold import best_operating_point, sweep_threshold  # noqa: F401
     from cv_lib.train import set_seeds, train  # noqa: F401
     from cv_lib.viz import (  # noqa: F401
         ErrorEntry,

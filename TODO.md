@@ -12,26 +12,26 @@ Roadmap для повседневного использования. Сгруп
 
 ## P0 — каждодневные операции, которых не хватает
 
-- [ ] **Tiled / sliced inference** `src/cv_lib/infer/tiled.py`
+- [x] **Tiled / sliced inference** `src/cv_lib/infer/tiled.py`
   `sliced_predict(model, image, tile=640, overlap=0.2, nms_iou=0.5, conf=0.25)` —
   режет крупный кадр на перекрывающиеся тайлы, инференсит, склеивает боксы обратно
   в координаты оригинала + глобальный NMS (SAHI-подход). Закрывает мелкие объекты на
   больших снимках. CLI: флаг `cvlib infer --tiled --tile 640 --overlap 0.2`.
   Тесты: `tests/test_infer_tiled.py` (склейка координат, дедуп на стыках).
 
-- [ ] **Ремап / фильтрация классов в YOLO-лейблах** `src/cv_lib/data/remap.py`
+- [x] **Ремап / фильтрация классов в YOLO-лейблах** `src/cv_lib/data/remap.py`
   `remap_labels(labels_dir, mapping, drop=None, out=None)` — слить/переименовать/выкинуть
   классы и пересчитать `data.yaml`. Частая операция при объединении датасетов или
   схлопывании таксономии. CLI: `cvlib remap labels/ --map 2=0 3=0 --drop 5`.
   Тесты: `tests/test_remap.py`, `tests/test_cli.py`.
 
-- [ ] **Annotation QA — поиск аномалий разметки** `src/cv_lib/data/qa.py`
+- [x] **Annotation QA — поиск аномалий разметки** `src/cv_lib/data/qa.py`
   `audit_labels(labels_dir, ...) -> QAReport` — флагует подозрительные боксы (крошечные,
   во весь кадр, экстремальный aspect ratio), дубли боксов, выбросы по числу объектов на
   кадр, редкие классы. Дополняет `inspect` (тот ловит битое/OOB, этот — «странное, но
   валидное»). CLI: `cvlib qa labels/ --data data.yaml`. Тесты: `tests/test_qa.py`.
 
-- [ ] **Дедупликация и data-leakage** `src/cv_lib/data/dedup.py`
+- [x] **Дедупликация и data-leakage** `src/cv_lib/data/dedup.py`
   `find_duplicates(images_dir, hamming=5) -> list[cluster]` на perceptual-hash (pHash);
   отдельно `check_split_leakage(split_dir)` — находит одинаковые/near-dup изображения
   между train/val/test (типичная причина «слишком хороших» метрик). CLI: `cvlib dedup`.
@@ -39,36 +39,36 @@ Roadmap для повседневного использования. Сгруп
 
 ## P1 — оценка и выбор модели
 
-- [ ] **Per-class метрики + PR/F1-кривые** `src/cv_lib/metrics/__init__.py`
+- [x] **Per-class метрики + PR/F1-кривые** `src/cv_lib/metrics/__init__.py`
   `per_class_map(results) -> dict` и `plot_pr_curves(results, output_path=)` — разбивка
   mAP/precision/recall по классам + PR-кривые (где сейчас только confusion matrix и
   агрегатный `summarize_map`). Подключить к `cvlib eval --per-class`.
   Тесты: расширить `tests/test_metrics.py`.
 
-- [ ] **Подбор порога confidence / NMS** `src/cv_lib/metrics/threshold.py`
+- [x] **Подбор порога confidence / NMS** `src/cv_lib/metrics/threshold.py`
   `sweep_threshold(model, data, metric="f1") -> ThresholdReport` — перебор `conf` (и
   опц. `iou`), F1-vs-confidence, рекомендованная рабочая точка. Чтобы не ставить порог
   на глаз перед деплоем. CLI: `cvlib threshold --model best.pt --data data.yaml`.
   Тесты: `tests/test_threshold.py`.
 
-- [ ] **Кросс-форматный бенч экспортов** расширить `src/cv_lib/cli/_bench.py`
+- [x] **Кросс-форматный бенч экспортов** расширить `src/cv_lib/cli/_bench.py`
   PyTorch vs ONNX vs TensorRT в одной таблице: latency/FPS **и** mAP-паритет
   (через `validate_export`), чтобы видеть цену ускорения в качестве. CLI:
   `cvlib bench --model best.pt --formats pt onnx trt`. Тесты: `tests/test_bench.py` (моки).
 
 ## P1 — данные и лейблинг
 
-- [ ] **Авто-предразметка (pre-annotation)** `src/cv_lib/data/autolabel.py`
+- [x] **Авто-предразметка (pre-annotation)** `src/cv_lib/data/autolabel.py`
   `autolabel(model, images_dir, out, conf=0.4) -> int` — прогон модели по неразмеченным
   кадрам → YOLO `.txt` для импорта в CVAT как черновик. Ускоряет ручной лейблинг в разы.
   CLI: `cvlib autolabel --model best.pt images/ --out labels/`. Тесты: `tests/test_autolabel.py`.
 
-- [ ] **Hard-example mining / приоритет аннотации** `src/cv_lib/data/mining.py`
+- [x] **Hard-example mining / приоритет аннотации** `src/cv_lib/data/mining.py`
   `rank_for_labeling(model, images_dir, by="uncertainty") -> list[(path, score)]` —
   ранжирует неразмеченный пул по неуверенности/низкому conf/числу детекций, чтобы
   размечать сначала полезное (active learning). CLI: `cvlib mine`. Тесты: `tests/test_mining.py`.
 
-- [ ] **Извлечение кропов объектов** `src/cv_lib/data/crops.py`
+- [x] **Извлечение кропов объектов** `src/cv_lib/data/crops.py`
   `extract_crops(images_dir, labels_dir, out, per_class=True, pad=0.0)` — вырезает объекты
   по боксам (раскладка `out/<class>/...`) для ревью качества разметки или датасета под
   классификатор. CLI: `cvlib crops images/ labels/ --out crops/`. Тесты: `tests/test_crops.py`.
@@ -85,7 +85,7 @@ Roadmap для повседневного использования. Сгруп
   confusion matrix + per-class + FP/FN тайлы (`viz.errors`) + class distribution. Чтобы
   делиться результатом прогона одним файлом. CLI: `cvlib report`. Тесты: `tests/test_report.py`.
 
-- [ ] **Экспорт YOLO → COCO / Pascal VOC** расширить `src/cv_lib/data/convert.py`
+- [x] **Экспорт YOLO → COCO / Pascal VOC** расширить `src/cv_lib/data/convert.py`
   `yolo_to_coco(...)` / `yolo_to_voc(...)` — обратное направление к существующему импорту,
   для интеропа и сабмишенов. CLI: `cvlib convert labels/ --to coco --out ann.json`.
   Тесты: расширить `tests/test_data_convert.py` (round-trip YOLO↔COCO).

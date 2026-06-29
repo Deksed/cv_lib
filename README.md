@@ -157,7 +157,7 @@ cp .env.example .env
 ```
 cv_lib/
 ├── src/cv_lib/
-│   ├── cli/                # cvlib CLI: inspect/convert/split/distribution/augment/compare/infer/eval/export/bench/compare-runs/dvc-init
+│   ├── cli/                # cvlib CLI: inspect/convert/split/distribution/augment/remap/qa/dedup/crops/cvat-query/compare/infer/autolabel/mine/eval/threshold/export/bench/compare-runs/dvc-init
 │   ├── viz/
 │   │   ├── compare.py      # GT vs prediction side-by-side
 │   │   ├── batch.py        # show_batch() — грид изображений с боксами
@@ -167,11 +167,20 @@ cv_lib/
 │   ├── data/
 │   │   ├── __init__.py     # YOLO-формат, class distribution, iter pairs
 │   │   ├── inspect.py      # проверка датасета: битые, пропущенные, OOB
-│   │   ├── convert.py      # CVAT XML / COCO JSON / CVAT CSV → YOLO txt
+│   │   ├── convert.py      # CVAT/COCO/CSV → YOLO txt и YOLO → COCO/VOC
 │   │   ├── split.py        # train/val/test split + data.yaml (стратификация)
+│   │   ├── remap.py        # remap_labels() — слить/переименовать/выкинуть классы
+│   │   ├── qa.py           # audit_labels() — аномалии разметки
+│   │   ├── dedup.py        # near-duplicate (pHash) + data-leakage между сплитами
+│   │   ├── crops.py        # extract_crops() — кропы объектов по классам
+│   │   ├── autolabel.py    # autolabel() — авто-предразметка моделью
+│   │   ├── mining.py       # rank_for_labeling() — hard-example mining
 │   │   └── dvc_gen.py      # генерация dvc.yaml / params.yaml (DVC-пайплайн)
+│   ├── infer/
+│   │   └── tiled.py        # sliced_predict() — tiled inference для крупных кадров
 │   ├── metrics/
-│   │   └── __init__.py     # confusion matrix, mAP summary
+│   │   ├── __init__.py     # confusion matrix, mAP, per_class_map, PR-кривые
+│   │   └── threshold.py    # sweep_threshold() — подбор рабочего порога
 │   ├── train/
 │   │   └── __init__.py     # train() — сиды + config snapshot + model.train()
 │   └── export.py           # ONNX / TensorRT export + validate
@@ -179,7 +188,7 @@ cv_lib/
 │   ├── eval.py             # model.val() → mAP-таблица + confusion matrix PNG
 │   ├── batch_infer.py      # батч-инференс → YOLO-лейблы и/или изображения
 │   └── compare_gt_pred.py  # CLI-обёртка над viz.compare
-├── tests/                  # 82 теста, pytest
+├── tests/                  # 154 теста, pytest
 ├── notebooks/
 ├── configs/
 ├── .env.example
@@ -202,16 +211,23 @@ cvlib <command> --help
 | Команда | Назначение |
 |---|---|
 | `cvlib inspect` | health-check датасета (битые/пропущенные/невалидные боксы) |
-| `cvlib convert` | CVAT XML / COCO JSON / CVAT CSV → YOLO `.txt` |
+| `cvlib convert` | CVAT XML / COCO JSON / CVAT CSV ↔ YOLO `.txt` (+ YOLO → COCO/VOC через `--to`) |
 | `cvlib split` | train/val/test split YOLO-датасета + генерация `data.yaml` |
 | `cvlib distribution` | бар-чарт частоты классов (сравнение train/val/test) |
 | `cvlib augment` | превью аугментаций: original vs N вариантов (боксы пересчитываются) |
+| `cvlib remap` | слить/переименовать/выкинуть классы в YOLO-лейблах (+ rewrite `data.yaml`) |
+| `cvlib qa` | аудит разметки: крошечные/огромные боксы, экстремальный aspect, дубли, выбросы |
+| `cvlib dedup` | near-duplicate изображения (pHash) и data-leakage между train/val/test |
+| `cvlib crops` | вырезать объекты по боксам в `out/<class>/` (ревью / датасет под классификатор) |
 | `cvlib cvat-query` | поиск/фильтрация по CVAT CSV (label/task/assignee/image) |
 | `cvlib compare` | GT vs prediction side-by-side для одного изображения |
-| `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения |
-| `cvlib eval`    | `model.val()` → mAP-таблица + confusion matrix |
+| `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения (`--tiled` для крупных кадров) |
+| `cvlib autolabel` | авто-предразметка модели → YOLO `.txt` черновики для CVAT |
+| `cvlib mine` | ранжирование неразмеченных по неуверенности (active-learning очередь) |
+| `cvlib eval`    | `model.val()` → mAP-таблица + confusion matrix (`--per-class` для разбивки) |
+| `cvlib threshold` | sweep confidence → рекомендованная рабочая точка (F1/P/R) |
 | `cvlib export`  | экспорт YOLO `.pt` → ONNX (или сборка TensorRT `.engine`) |
-| `cvlib bench`   | sanity-check + бенчмарк латентности/FPS |
+| `cvlib bench`   | sanity-check + бенчмарк латентности/FPS (`--formats pt onnx trt`) |
 | `cvlib compare-runs` | сравнение train-прогонов: конфиги + лучшие метрики |
 | `cvlib dvc-init` | генерация `dvc.yaml` (+ `params.yaml`) — DVC-пайплайн train/eval |
 
@@ -226,9 +242,17 @@ cvlib cvat-query cvat_export.csv --label car --assignee anna --count
 cvlib split dataset/images --out dataset_split --names car person   # train/val/test + data.yaml
 cvlib distribution dataset_split --out class_dist.png              # частота классов по сплитам
 cvlib augment img.jpg --labels img.txt --names car person --out aug.png   # превью аугментаций
-cvlib eval --model runs/train/best.pt --data dataset/data.yaml
+cvlib remap labels/ --map 2=0 3=0 --drop 5 --out remapped/        # слить/выкинуть классы
+cvlib qa dataset_split/labels/train                               # аудит подозрительной разметки
+cvlib dedup dataset_split --leakage                               # утечки между сплитами
+cvlib crops dataset/images --labels dataset/labels --out crops/   # кропы объектов по классам
+cvlib autolabel images/ --model best.pt --out labels/            # черновая разметка для CVAT
+cvlib mine images/ --model best.pt --top 20                       # что размечать в первую очередь
+cvlib eval --model runs/train/best.pt --data dataset/data.yaml --per-class
+cvlib threshold --model best.pt --data dataset/data.yaml          # подбор рабочего порога
 cvlib export runs/train/best.pt --format onnx --imgsz 640        # → best.onnx
-cvlib bench --model best.pt --imgsz 320 640 1280
+cvlib bench --model best.pt --formats pt onnx --imgsz 640         # кросс-форматный бенч
+cvlib convert dataset/labels --to coco --images dataset/images --names car person --out ann.json
 cvlib dvc-init                                       # → dvc.yaml + params.yaml
 ```
 

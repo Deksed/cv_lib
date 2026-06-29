@@ -35,6 +35,13 @@ def _minimal_args(name: str) -> list[str]:
         "split": ["split", "imgs/", "--out", "ds/"],
         "distribution": ["distribution", "labels/"],
         "augment": ["augment", "img.jpg"],
+        "remap": ["remap", "labels/", "--map", "1=0"],
+        "qa": ["qa", "labels/"],
+        "dedup": ["dedup", "imgs/"],
+        "crops": ["crops", "imgs/"],
+        "autolabel": ["autolabel", "imgs/", "--model", "m.pt", "--out", "labels/"],
+        "mine": ["mine", "imgs/", "--model", "m.pt"],
+        "threshold": ["threshold", "--model", "m.pt", "--data", "d.yaml"],
     }[name]
 
 

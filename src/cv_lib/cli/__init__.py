@@ -12,18 +12,25 @@ import argparse
 from cv_lib import __version__
 from cv_lib.cli import (
     _augment,
+    _autolabel,
     _bench,
     _compare,
     _compare_runs,
     _convert,
+    _crops,
     _cvat_query,
+    _dedup,
     _distribution,
     _dvc_init,
     _eval,
     _export,
     _infer,
     _inspect,
+    _mine,
+    _qa,
+    _remap,
     _split,
+    _threshold,
 )
 from cv_lib.cli._common import configure_console, load_env, setup_logging
 
@@ -43,6 +50,13 @@ COMMANDS = {
     "split": _split,
     "distribution": _distribution,
     "augment": _augment,
+    "remap": _remap,
+    "qa": _qa,
+    "dedup": _dedup,
+    "crops": _crops,
+    "autolabel": _autolabel,
+    "mine": _mine,
+    "threshold": _threshold,
 }
 
 
