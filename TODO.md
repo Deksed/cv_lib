@@ -3,8 +3,11 @@
 Roadmap для повседневного использования. Сгруппировано по приоритету.
 Отметки: `[ ]` — не начато, `[~]` — в работе, `[x]` — готово.
 
-Связано с открытыми issue: **#1** (сборка как библиотека), **#2** (CVAT CSV → YOLO),
+Закрытые issue: **#1** (сборка как библиотека), **#2** (CVAT CSV → YOLO),
 **#3** (генерация `dvc.yaml`).
+
+> **Статус: весь роадмап P0–P3 закрыт.** Ниже — история сделанного. Новые задачи
+> добавляйте сюда же по приоритету.
 
 ---
 
@@ -42,9 +45,10 @@ Roadmap для повседневного использования. Сгруп
   `--mode copy|symlink|move`, 2- или 3-way). Завязан как стейдж `split` в `dvc_gen`.
   Тесты: `tests/test_split.py`, `tests/test_cli.py`.
 
-- [ ] **Превью аугментаций** `src/cv_lib/viz/augment.py`
-  `albumentations` уже в зависимостях, но нигде не используется. Грид «оригинал vs N аугментаций»
-  с корректным пересчётом боксов — чтобы быстро проверять пайплайн перед обучением.
+- [x] **Превью аугментаций** `src/cv_lib/viz/augment.py`
+  `augment_preview()` + `default_transform()` — грид «оригинал vs N аугментаций» с пересчётом
+  боксов через `albumentations` (bbox_params YOLO). Экспортировано в публичный API. CLI:
+  `cvlib augment`. Тесты: `tests/test_viz_augment.py`, `tests/test_cli.py`.
 
 - [x] **Class distribution chart** `src/cv_lib/viz/distribution.py`
   `plot_class_distribution(labels, class_names=None, sort=, horizontal=, log_scale=, output_path=)`
@@ -52,24 +56,25 @@ Roadmap для повседневного использования. Сгруп
   train/val/test рядом. CLI: `cvlib distribution` (автодетект `labels/<split>` + `data.yaml`,
   печать таблицы счётчиков + сохранение PNG). Тесты: `tests/test_distribution.py`, `tests/test_cli.py`.
 
-- [ ] **`scripts/export.py` + `cvlib export`**
-  CLI-обёртка над `cv_lib.export` (ONNX/TensorRT + `validate_export`). Сейчас export только программно.
+- [x] **`cvlib export`** `src/cv_lib/cli/_export.py`
+  CLI-обёртка над `cv_lib.export` (ONNX/TensorRT + `validate_export`). Тесты: `tests/test_export.py`.
 
 ## P2 — качество и воспроизводимость
 
-- [ ] **CI workflow** `.github/workflows/ci.yml`
-  Из «What's Next»: `ruff check` + `uv run --extra dev pytest` на push/PR (CPU-only матрица).
+- [x] **CI workflow** `.github/workflows/ci.yml`
+  `ruff check` + `uv run --extra dev pytest` на push в `main` и на каждый PR (ubuntu, CPU-only),
+  с `concurrency`-отменой устаревших прогонов.
 
-- [ ] **Добить покрытие тестами**
-  Тесты есть для `data.inspect`, `data.convert`, `viz.batch`, `viz.errors`.
-  Нет для: `viz.compare`, `metrics`, `train` (snapshot конфига), `export` (с моком), `data/__init__`.
+- [x] **Добить покрытие тестами**
+  Добавлены `tests/test_viz_compare.py`, `tests/test_metrics.py`, `tests/test_train.py`
+  (snapshot конфига), `tests/test_export.py` (с моком), `tests/test_data.py`.
 
-- [ ] **pre-commit hook**
-  `.pre-commit-config.yaml` с `ruff check --fix` + `ruff format`, чтобы не гонять руками.
+- [x] **pre-commit hook** `.pre-commit-config.yaml`
+  `ruff check --fix` + `ruff format`, чтобы не гонять руками.
 
-- [ ] **Notebook-примеры** `notebooks/`
-  Из «What's Next»: рабочие примеры `inspect_dataset`, `find_errors/render_errors`, `show_batch`.
-  Сейчас только `viz_test.ipynb`.
+- [x] **Notebook-примеры** `notebooks/usage_examples.ipynb`
+  Самодостаточный ноутбук: `inspect_dataset`, `find_errors`/`render_errors`, `show_batch`
+  (рядом с прежним `viz_test.ipynb`).
 
 ## P3 — приятные мелочи
 
