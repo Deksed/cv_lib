@@ -47,6 +47,31 @@ pip install -r requirements-torch.txt
 pip install -e ".[dev]"
 ```
 
+### Закрытый контур / офлайн (air-gapped)
+
+`requirements-lock.txt` — полностью запиненный lock со всеми транзитивными
+зависимостями (core + cu118-torch) и хешами. Универсальный: содержит маркеры
+платформ (`sys_platform`, `platform_machine`), поэтому годится и для Linux-целевой
+машины, и для Windows. Сам пакет `cv-lib` в lock не входит — он собирается локально.
+
+На машине **с** доступом в интернет скачать все колёса:
+
+```bash
+pip download -r requirements-lock.txt -d wheelhouse/   # + сам wheel: uv build / pip wheel . --no-deps -w wheelhouse/
+```
+
+Перенести `wheelhouse/` в закрытый контур и поставить **без сети**:
+
+```bash
+pip install --no-index --find-links wheelhouse/ -r requirements-lock.txt
+pip install --no-index --find-links wheelhouse/ cv_lib-0.1.0-py3-none-any.whl
+```
+
+> Для сборки wheel в контуре нужны ещё build-зависимости из `[build-system]`
+> (`setuptools>=68`, `wheel`) — добавьте их в `wheelhouse/` тем же `pip download`.
+> Пересобрать lock: `uv pip compile pyproject.toml --extra cu118 --universal
+> --python-version 3.12 --generate-hashes --no-emit-package cv-lib -o requirements-lock.txt`.
+
 ---
 
 ## Сборка и использование как библиотеки
@@ -159,7 +184,8 @@ cv_lib/
 ├── configs/
 ├── .env.example
 ├── pyproject.toml
-└── requirements-torch.txt
+├── requirements-torch.txt   # torch/torchvision с cu118-индекса (pip)
+└── requirements-lock.txt    # полный pinned lock + хеши для офлайн/закрытого контура
 ```
 
 ---
