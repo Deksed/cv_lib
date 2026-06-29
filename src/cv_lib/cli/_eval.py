@@ -41,6 +41,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--no-cm", action="store_true", help="Skip saving the confusion matrix.")
     parser.add_argument(
+        "--per-class", action="store_true",
+        help="Print a per-class precision/recall/AP table.",
+    )
+    parser.add_argument(
         "--device",
         default=None,
         help="Device override, e.g. 'cpu', '0', 'cuda:0' (default: auto).",
@@ -51,7 +55,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def run(args: argparse.Namespace) -> None:
     from ultralytics import YOLO
 
-    from cv_lib.metrics import plot_confusion_matrix, summarize_map
+    from cv_lib.metrics import per_class_map, plot_confusion_matrix, summarize_map
 
     model = YOLO(args.model)
 
@@ -84,6 +88,20 @@ def run(args: argparse.Namespace) -> None:
         if k not in top_keys:
             print(f"{k:<{col_w}}  {v:>8.4f}")
     print("─" * (col_w + 12))
+
+    # --- per-class table ---
+    if args.per_class:
+        per_class = per_class_map(results)
+        if per_class:
+            name_w = max(len(n) for n in per_class) + 2
+            print(f"\n{'Class':<{name_w}}  {'P':>7}  {'R':>7}  {'AP50':>7}  {'AP50-95':>7}")
+            print("─" * (name_w + 34))
+            for name, m in per_class.items():
+                print(
+                    f"{name:<{name_w}}  {m['precision']:>7.4f}  {m['recall']:>7.4f}  "
+                    f"{m['ap50']:>7.4f}  {m['ap50_95']:>7.4f}"
+                )
+            print("─" * (name_w + 34))
 
     # --- confusion matrix ---
     if not args.no_cm:

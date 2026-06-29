@@ -9,7 +9,16 @@ from loguru import logger
 
 from cv_lib.cli._common import add_verbose, resolve_names
 
-HELP = "Convert CVAT XML / COCO JSON / CVAT CSV annotations to YOLO .txt labels."
+HELP = "Convert CVAT XML / COCO JSON / CVAT CSV ↔ YOLO labels (COCO/VOC export too)."
+
+EPILOG = (
+    "Import (→ YOLO):\n"
+    "  cvlib convert ann.json --out labels/\n"
+    "  cvlib convert export.csv --out labels/\n"
+    "Export (YOLO →):\n"
+    "  cvlib convert labels/ --to coco --images images/ --names car person --out ann.json\n"
+    "  cvlib convert labels/ --to voc  --images images/ --names car person --out voc/\n"
+)
 
 
 def _detect_format(path: Path) -> str:
@@ -26,14 +35,24 @@ def _detect_format(path: Path) -> str:
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("input", help="Path to CVAT .xml, COCO .json, or CVAT .csv.")
     parser.add_argument(
-        "--out", required=True, metavar="DIR",
-        help="Directory to write YOLO .txt files into.",
+        "input", help="Annotation file (→ YOLO), or a YOLO labels dir (with --to)."
+    )
+    parser.add_argument(
+        "--out", required=True, metavar="PATH",
+        help="Output directory (YOLO/VOC) or .json file (COCO).",
     )
     parser.add_argument(
         "--format", choices=["auto", "cvat-xml", "coco", "cvat-csv"], default="auto",
-        help="Input format (default: auto — inferred from extension).",
+        help="Input format for import (default: auto — inferred from extension).",
+    )
+    parser.add_argument(
+        "--to", choices=["yolo", "coco", "voc"], default="yolo",
+        help="Target format. 'yolo' (default) imports; 'coco'/'voc' export from YOLO.",
+    )
+    parser.add_argument(
+        "--images", metavar="DIR",
+        help="Images directory — required for --to coco/voc (reads sizes).",
     )
 
     names_group = parser.add_mutually_exclusive_group()
@@ -49,6 +68,28 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
+    class_names = resolve_names(args.names, args.data)
+
+    # --- Export direction: YOLO labels → COCO / VOC ---
+    if args.to in ("coco", "voc"):
+        if not args.images:
+            raise SystemExit("--images is required for --to coco/voc (needed to read image sizes).")
+        if not class_names:
+            raise SystemExit("--names or --data is required for --to coco/voc.")
+        from cv_lib.data.convert import yolo_to_coco, yolo_to_voc
+
+        if args.to == "coco":
+            coco = yolo_to_coco(args.images, args.input, args.out, class_names)
+            logger.info(
+                "YOLO → COCO: {} images, {} annotations → {}",
+                len(coco["images"]), len(coco["annotations"]), args.out,
+            )
+        else:
+            n = yolo_to_voc(args.images, args.input, args.out, class_names)
+            logger.info("YOLO → VOC: wrote {} XML file(s) → {}", n, args.out)
+        return
+
+    # --- Import direction: CVAT/COCO → YOLO ---
     from cv_lib.data.convert import (
         coco_json_to_yolo,
         cvat_csv_to_yolo,
@@ -57,7 +98,6 @@ def run(args: argparse.Namespace) -> None:
 
     input_path = Path(args.input)
     fmt = args.format if args.format != "auto" else _detect_format(input_path)
-    class_names = resolve_names(args.names, args.data)
 
     converters = {
         "cvat-xml": cvat_xml_to_yolo,

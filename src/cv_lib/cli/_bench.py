@@ -55,6 +55,36 @@ def _synthetic(imgsz: int) -> np.ndarray:
     return np.random.randint(0, 255, (imgsz, imgsz, 3), dtype=np.uint8)
 
 
+# Format alias → (Ultralytics export format, file suffix)
+_FORMAT_SPEC = {
+    "pt": (None, ".pt"),
+    "onnx": ("onnx", ".onnx"),
+    "trt": ("engine", ".engine"),
+    "engine": ("engine", ".engine"),
+}
+
+
+def resolve_format_path(model_path: Path, fmt: str, imgsz: int, device: str | None) -> Path:
+    """Return a runnable model path for ``fmt``, exporting from the .pt if needed.
+
+    ``pt`` returns the path unchanged. ``onnx``/``trt`` reuse an existing export
+    next to the weights, otherwise build it via Ultralytics ``model.export``.
+    """
+    export_fmt, suffix = _FORMAT_SPEC[fmt]
+    if export_fmt is None:
+        return model_path
+    candidate = model_path.with_suffix(suffix)
+    if candidate.exists():
+        return candidate
+    from ultralytics import YOLO
+
+    kwargs: dict = {"format": export_fmt, "imgsz": imgsz}
+    if device is not None:
+        kwargs["device"] = device
+    exported = YOLO(str(model_path)).export(**kwargs)
+    return Path(exported) if exported else candidate
+
+
 def _fmt(v: float, d: int = 1) -> str:
     return f"{v:.{d}f}"
 
@@ -221,6 +251,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Input resolution(s) to test (default: 640). Multiple values run a sweep.",
     )
     parser.add_argument(
+        "--formats", nargs="+", default=["pt"], choices=list(_FORMAT_SPEC),
+        metavar="FMT",
+        help="Run each model in these formats (pt onnx trt); exports as needed.",
+    )
+    parser.add_argument(
         "--conf", type=float, default=0.25,
         help="Confidence threshold (default: 0.25).",
     )
@@ -263,28 +298,31 @@ def run(args: argparse.Namespace) -> None:
     table_rows: list[dict] = []
     breakdown: list[tuple[str, int, dict]] = []
 
+    multi_fmt = len(args.formats) > 1 or args.formats != ["pt"]
     for model_path in models:
-        for imgsz in args.imgsz:
-            label = model_path.name
-            print(f"\n  checking {label}  imgsz={imgsz} …", end="", flush=True)
-            try:
-                stats = benchmark_model(
-                    model_path=model_path,
-                    imgsz=imgsz,
-                    images=images,
-                    conf=args.conf,
-                    warmup_runs=args.warmup,
-                    timed_runs=args.runs,
-                    device=args.device,
-                    save=args.save,
-                )
-                print(f"  {_fmt(stats['mean_ms'])} ms/frame  {_fmt(stats['fps'])} FPS")
-            except Exception as exc:
-                logger.error("FAILED: {}", exc)
-                continue
+        for fmt in args.formats:
+            for imgsz in args.imgsz:
+                label = f"{model_path.name} [{fmt}]" if multi_fmt else model_path.name
+                print(f"\n  checking {label}  imgsz={imgsz} …", end="", flush=True)
+                try:
+                    run_path = resolve_format_path(model_path, fmt, imgsz, args.device)
+                    stats = benchmark_model(
+                        model_path=run_path,
+                        imgsz=imgsz,
+                        images=images,
+                        conf=args.conf,
+                        warmup_runs=args.warmup,
+                        timed_runs=args.runs,
+                        device=args.device,
+                        save=args.save,
+                    )
+                    print(f"  {_fmt(stats['mean_ms'])} ms/frame  {_fmt(stats['fps'])} FPS")
+                except Exception as exc:
+                    logger.error("FAILED: {}", exc)
+                    continue
 
-            table_rows.append({"model": label, "imgsz": imgsz, **stats})
-            breakdown.append((label, imgsz, stats))
+                table_rows.append({"model": label, "imgsz": imgsz, **stats})
+                breakdown.append((label, imgsz, stats))
 
     _print_table(table_rows)
     print()
