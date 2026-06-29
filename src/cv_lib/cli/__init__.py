@@ -24,13 +24,16 @@ from cv_lib.cli import (
     _dvc_init,
     _eval,
     _export,
+    _fix,
     _infer,
     _inspect,
+    _merge,
     _mine,
     _qa,
     _remap,
     _split,
     _threshold,
+    _train,
 )
 from cv_lib.cli._common import configure_console, load_env, setup_logging
 
@@ -57,6 +60,9 @@ COMMANDS = {
     "autolabel": _autolabel,
     "mine": _mine,
     "threshold": _threshold,
+    "train": _train,
+    "merge": _merge,
+    "fix": _fix,
 }
 
 

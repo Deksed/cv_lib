@@ -169,6 +169,79 @@ def coco_json_to_yolo(
 
 
 # ---------------------------------------------------------------------------
+# Pascal VOC XML → YOLO txt
+# ---------------------------------------------------------------------------
+
+def voc_to_yolo(
+    voc_dir: str | Path,
+    out_dir: str | Path,
+    class_names: list[str] | None = None,
+) -> dict[str, int]:
+    """Convert a directory of Pascal VOC XML annotations to YOLO ``.txt`` files.
+
+    Each VOC file carries ``<size>`` (width/height) and ``<object>`` entries with
+    a ``<name>`` and ``<bndbox>`` (xmin/ymin/xmax/ymax in pixels). One ``.txt`` is
+    written per XML.
+
+    Args:
+        voc_dir:      directory of ``*.xml`` VOC annotation files
+        out_dir:      directory to write ``.txt`` files into
+        class_names:  ordered class names; inferred (first-seen) from the XML if None
+
+    Returns:
+        dict mapping class name → class index
+    """
+    import xml.etree.ElementTree as ET
+
+    voc_dir = Path(voc_dir)
+    xml_files = sorted(voc_dir.glob("*.xml"))
+
+    if class_names is None:
+        class_map: dict[str, int] = {}
+        for xml_path in xml_files:
+            for obj in ET.parse(xml_path).getroot().findall("object"):
+                name = (obj.findtext("name") or "").strip()
+                if name and name not in class_map:
+                    class_map[name] = len(class_map)
+    else:
+        class_map = {name: i for i, name in enumerate(class_names)}
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for xml_path in xml_files:
+        root = ET.parse(xml_path).getroot()
+        size = root.find("size")
+        img_w = float(size.findtext("width", "1")) if size is not None else 1.0
+        img_h = float(size.findtext("height", "1")) if size is not None else 1.0
+        if img_w <= 0 or img_h <= 0:
+            continue
+
+        lines: list[str] = []
+        for obj in root.findall("object"):
+            name = (obj.findtext("name") or "").strip()
+            if name not in class_map:
+                continue
+            bnd = obj.find("bndbox")
+            if bnd is None:
+                continue
+            xmin = float(bnd.findtext("xmin", "0"))
+            ymin = float(bnd.findtext("ymin", "0"))
+            xmax = float(bnd.findtext("xmax", "0"))
+            ymax = float(bnd.findtext("ymax", "0"))
+            cx = ((xmin + xmax) / 2) / img_w
+            cy = ((ymin + ymax) / 2) / img_h
+            bw = (xmax - xmin) / img_w
+            bh = (ymax - ymin) / img_h
+            lines.append(f"{class_map[name]} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+
+        stem = root.findtext("filename") or xml_path.name
+        (out_dir / f"{Path(stem).stem}.txt").write_text("\n".join(lines))
+
+    return class_map
+
+
+# ---------------------------------------------------------------------------
 # CVAT CSV (flat per-instance export) → YOLO txt
 # ---------------------------------------------------------------------------
 

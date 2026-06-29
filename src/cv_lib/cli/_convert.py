@@ -43,8 +43,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Output directory (YOLO/VOC) or .json file (COCO).",
     )
     parser.add_argument(
-        "--format", choices=["auto", "cvat-xml", "coco", "cvat-csv"], default="auto",
-        help="Input format for import (default: auto — inferred from extension).",
+        "--format", choices=["auto", "cvat-xml", "coco", "cvat-csv", "voc"], default="auto",
+        help="Input format for import (default: auto; 'voc' = a dir of Pascal VOC XML).",
     )
     parser.add_argument(
         "--to", choices=["yolo", "coco", "voc"], default="yolo",
@@ -89,11 +89,12 @@ def run(args: argparse.Namespace) -> None:
             logger.info("YOLO → VOC: wrote {} XML file(s) → {}", n, args.out)
         return
 
-    # --- Import direction: CVAT/COCO → YOLO ---
+    # --- Import direction: CVAT/COCO/VOC → YOLO ---
     from cv_lib.data.convert import (
         coco_json_to_yolo,
         cvat_csv_to_yolo,
         cvat_xml_to_yolo,
+        voc_to_yolo,
     )
 
     input_path = Path(args.input)
@@ -103,6 +104,7 @@ def run(args: argparse.Namespace) -> None:
         "cvat-xml": cvat_xml_to_yolo,
         "coco": coco_json_to_yolo,
         "cvat-csv": cvat_csv_to_yolo,
+        "voc": voc_to_yolo,  # input is a directory of VOC XML files
     }
     class_map = converters[fmt](input_path, args.out, class_names=class_names)
 

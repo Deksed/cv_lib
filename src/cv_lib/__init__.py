@@ -54,9 +54,18 @@ _EXPORTS: dict[str, str] = {
     "PipelineConfig": "cv_lib.data.dvc_gen",
     "yolo_to_coco": "cv_lib.data.convert",
     "yolo_to_voc": "cv_lib.data.convert",
+    "voc_to_yolo": "cv_lib.data.convert",
     # data.split
     "train_val_test_split": "cv_lib.data.split",
     "SplitReport": "cv_lib.data.split",
+    # data.merge
+    "merge_datasets": "cv_lib.data.merge",
+    "MergeReport": "cv_lib.data.merge",
+    "DatasetSource": "cv_lib.data.merge",
+    "source_from_root": "cv_lib.data.merge",
+    # data.repair
+    "repair_labels": "cv_lib.data.repair",
+    "RepairReport": "cv_lib.data.repair",
     # data.remap
     "remap_labels": "cv_lib.data.remap",
     "RemapReport": "cv_lib.data.remap",
@@ -126,6 +135,7 @@ if TYPE_CHECKING:
         cvat_csv_to_yolo,
         cvat_xml_to_yolo,
         query_cvat_csv,
+        voc_to_yolo,
         yolo_to_coco,
         yolo_to_voc,
     )
@@ -138,9 +148,16 @@ if TYPE_CHECKING:
         generate_params_yaml,
     )
     from cv_lib.data.inspect import InspectReport, inspect_dataset  # noqa: F401
+    from cv_lib.data.merge import (  # noqa: F401
+        DatasetSource,
+        MergeReport,
+        merge_datasets,
+        source_from_root,
+    )
     from cv_lib.data.mining import rank_for_labeling, uncertainty_score  # noqa: F401
     from cv_lib.data.qa import QAReport, audit_labels  # noqa: F401
     from cv_lib.data.remap import RemapReport, remap_labels  # noqa: F401
+    from cv_lib.data.repair import RepairReport, repair_labels  # noqa: F401
     from cv_lib.data.split import SplitReport, train_val_test_split  # noqa: F401
     from cv_lib.export import export_onnx, export_trt, validate_export  # noqa: F401
     from cv_lib.infer.tiled import generate_tiles, sliced_predict  # noqa: F401

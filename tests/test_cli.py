@@ -42,6 +42,9 @@ def _minimal_args(name: str) -> list[str]:
         "autolabel": ["autolabel", "imgs/", "--model", "m.pt", "--out", "labels/"],
         "mine": ["mine", "imgs/", "--model", "m.pt"],
         "threshold": ["threshold", "--model", "m.pt", "--data", "d.yaml"],
+        "train": ["train", "--model", "m.pt", "--data", "d.yaml"],
+        "merge": ["merge", "ds1/", "ds2/", "--out", "merged/"],
+        "fix": ["fix", "labels/"],
     }[name]
 
 
