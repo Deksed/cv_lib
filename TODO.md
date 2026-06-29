@@ -3,86 +3,104 @@
 Roadmap для повседневного использования. Сгруппировано по приоритету.
 Отметки: `[ ]` — не начато, `[~]` — в работе, `[x]` — готово.
 
-Закрытые issue: **#1** (сборка как библиотека), **#2** (CVAT CSV → YOLO),
-**#3** (генерация `dvc.yaml`).
-
-> **Статус: весь роадмап P0–P3 закрыт.** Ниже — история сделанного. Новые задачи
-> добавляйте сюда же по приоритету.
+> Предыдущий роадмап (P0–P3: CLI, CVAT CSV, DVC, split, distribution, augment,
+> export, CI, тесты, pre-commit, notebooks) **полностью закрыт** — см. раздел
+> [«Сделано»](#сделано-история) внизу. Ниже — новый бэклог под ежедневную работу
+> с детекционными проектами.
 
 ---
 
-## P0 — закрывает открытые issue, разблокирует ежедневную работу
+## P0 — каждодневные операции, которых не хватает
 
-- [x] **Единый CLI `cvlib`** (#1)
-  `[project.scripts]` → `cv_lib.cli:main`; пакет `src/cv_lib/cli/` с подкомандами
-  `inspect`, `convert`, `compare`, `infer`, `eval`, `bench`. Скрипты в `scripts/` стали
-  тонкими шимами над общим кодом (обратная совместимость, без дублирования). Тесты: `tests/test_cli.py`.
+- [ ] **Tiled / sliced inference** `src/cv_lib/infer/tiled.py`
+  `sliced_predict(model, image, tile=640, overlap=0.2, nms_iou=0.5, conf=0.25)` —
+  режет крупный кадр на перекрывающиеся тайлы, инференсит, склеивает боксы обратно
+  в координаты оригинала + глобальный NMS (SAHI-подход). Закрывает мелкие объекты на
+  больших снимках. CLI: флаг `cvlib infer --tiled --tile 640 --overlap 0.2`.
+  Тесты: `tests/test_infer_tiled.py` (склейка координат, дедуп на стыках).
 
-- [x] **Инструкция по сборке и установке как библиотеки** (#1)
-  Раздел в README «Сборка и использование как библиотеки»: `uv build` / `pip wheel`,
-  установка wheel в стороннем проекте, пример `from cv_lib import ...`. Публичный API
-  зафиксирован в `cv_lib/__init__.py` (ленивый реэкспорт через `__getattr__`/`__all__`).
-  Тесты: `tests/test_public_api.py`.
+- [ ] **Ремап / фильтрация классов в YOLO-лейблах** `src/cv_lib/data/remap.py`
+  `remap_labels(labels_dir, mapping, drop=None, out=None)` — слить/переименовать/выкинуть
+  классы и пересчитать `data.yaml`. Частая операция при объединении датасетов или
+  схлопывании таксономии. CLI: `cvlib remap labels/ --map 2=0 3=0 --drop 5`.
+  Тесты: `tests/test_remap.py`, `tests/test_cli.py`.
 
-- [x] **Поддержка CVAT CSV формата** (#2)
-  `cvat_csv_to_yolo()` + `query_cvat_csv()` в `data/convert.py` (+ `CVAT_CSV_COLUMNS`).
-  CLI: `cvlib convert *.csv` (автодетект формата) и `cvlib cvat-query` (фильтр по
-  label/task/assignee/image). Фильтр по `instance_shape` (по умолчанию rectangles).
-  Тесты: `tests/test_data_convert.py`, `tests/test_cli.py`.
+- [ ] **Annotation QA — поиск аномалий разметки** `src/cv_lib/data/qa.py`
+  `audit_labels(labels_dir, ...) -> QAReport` — флагует подозрительные боксы (крошечные,
+  во весь кадр, экстремальный aspect ratio), дубли боксов, выбросы по числу объектов на
+  кадр, редкие классы. Дополняет `inspect` (тот ловит битое/OOB, этот — «странное, но
+  валидное»). CLI: `cvlib qa labels/ --data data.yaml`. Тесты: `tests/test_qa.py`.
 
-- [x] **Генерация `dvc.yaml`** (#3)
-  `src/cv_lib/data/dvc_gen.py` (`build_pipeline` / `generate_dvc_yaml` /
-  `generate_params_yaml` / `PipelineConfig`) + `cvlib dvc-init`. Стандартные стейджи:
-  `collect → split → train (внешний модуль) → compare-with-prev → report`; пишет
-  скаффолд `dvc.yaml` + `params.yaml`. Стейдж `split` ссылается на будущий
-  `cv_lib.data.split` (P1). Тесты: `tests/test_dvc_gen.py`, `tests/test_cli.py`.
+- [ ] **Дедупликация и data-leakage** `src/cv_lib/data/dedup.py`
+  `find_duplicates(images_dir, hamming=5) -> list[cluster]` на perceptual-hash (pHash);
+  отдельно `check_split_leakage(split_dir)` — находит одинаковые/near-dup изображения
+  между train/val/test (типичная причина «слишком хороших» метрик). CLI: `cvlib dedup`.
+  Тесты: `tests/test_dedup.py`.
 
-## P1 — частые операции, которых сейчас нет
+## P1 — оценка и выбор модели
 
-- [x] **Сплит датасета** `src/cv_lib/data/split.py`
-  `train_val_test_split(images_dir, labels_dir, ratios=(0.8,0.1,0.1), seed=42, stratify_by_class=True)`
-  + генерация `data.yaml`. CLI: `cvlib split` (стратификация по доминирующему классу,
-  `--mode copy|symlink|move`, 2- или 3-way). Завязан как стейдж `split` в `dvc_gen`.
-  Тесты: `tests/test_split.py`, `tests/test_cli.py`.
+- [ ] **Per-class метрики + PR/F1-кривые** `src/cv_lib/metrics/__init__.py`
+  `per_class_map(results) -> dict` и `plot_pr_curves(results, output_path=)` — разбивка
+  mAP/precision/recall по классам + PR-кривые (где сейчас только confusion matrix и
+  агрегатный `summarize_map`). Подключить к `cvlib eval --per-class`.
+  Тесты: расширить `tests/test_metrics.py`.
 
-- [x] **Превью аугментаций** `src/cv_lib/viz/augment.py`
-  `augment_preview()` + `default_transform()` — грид «оригинал vs N аугментаций» с пересчётом
-  боксов через `albumentations` (bbox_params YOLO). Экспортировано в публичный API. CLI:
-  `cvlib augment`. Тесты: `tests/test_viz_augment.py`, `tests/test_cli.py`.
+- [ ] **Подбор порога confidence / NMS** `src/cv_lib/metrics/threshold.py`
+  `sweep_threshold(model, data, metric="f1") -> ThresholdReport` — перебор `conf` (и
+  опц. `iou`), F1-vs-confidence, рекомендованная рабочая точка. Чтобы не ставить порог
+  на глаз перед деплоем. CLI: `cvlib threshold --model best.pt --data data.yaml`.
+  Тесты: `tests/test_threshold.py`.
 
-- [x] **Class distribution chart** `src/cv_lib/viz/distribution.py`
-  `plot_class_distribution(labels, class_names=None, sort=, horizontal=, log_scale=, output_path=)`
-  → matplotlib `Figure`; принимает один labels-каталог или `{split: dir}` для сравнения
-  train/val/test рядом. CLI: `cvlib distribution` (автодетект `labels/<split>` + `data.yaml`,
-  печать таблицы счётчиков + сохранение PNG). Тесты: `tests/test_distribution.py`, `tests/test_cli.py`.
+- [ ] **Кросс-форматный бенч экспортов** расширить `src/cv_lib/cli/_bench.py`
+  PyTorch vs ONNX vs TensorRT в одной таблице: latency/FPS **и** mAP-паритет
+  (через `validate_export`), чтобы видеть цену ускорения в качестве. CLI:
+  `cvlib bench --model best.pt --formats pt onnx trt`. Тесты: `tests/test_bench.py` (моки).
 
-- [x] **`cvlib export`** `src/cv_lib/cli/_export.py`
-  CLI-обёртка над `cv_lib.export` (ONNX/TensorRT + `validate_export`). Тесты: `tests/test_export.py`.
+## P1 — данные и лейблинг
 
-## P2 — качество и воспроизводимость
+- [ ] **Авто-предразметка (pre-annotation)** `src/cv_lib/data/autolabel.py`
+  `autolabel(model, images_dir, out, conf=0.4) -> int` — прогон модели по неразмеченным
+  кадрам → YOLO `.txt` для импорта в CVAT как черновик. Ускоряет ручной лейблинг в разы.
+  CLI: `cvlib autolabel --model best.pt images/ --out labels/`. Тесты: `tests/test_autolabel.py`.
 
-- [x] **CI workflow** `.github/workflows/ci.yml`
-  `ruff check` + `uv run --extra dev pytest` на push в `main` и на каждый PR (ubuntu, CPU-only),
-  с `concurrency`-отменой устаревших прогонов.
+- [ ] **Hard-example mining / приоритет аннотации** `src/cv_lib/data/mining.py`
+  `rank_for_labeling(model, images_dir, by="uncertainty") -> list[(path, score)]` —
+  ранжирует неразмеченный пул по неуверенности/низкому conf/числу детекций, чтобы
+  размечать сначала полезное (active learning). CLI: `cvlib mine`. Тесты: `tests/test_mining.py`.
 
-- [x] **Добить покрытие тестами**
-  Добавлены `tests/test_viz_compare.py`, `tests/test_metrics.py`, `tests/test_train.py`
-  (snapshot конфига), `tests/test_export.py` (с моком), `tests/test_data.py`.
+- [ ] **Извлечение кропов объектов** `src/cv_lib/data/crops.py`
+  `extract_crops(images_dir, labels_dir, out, per_class=True, pad=0.0)` — вырезает объекты
+  по боксам (раскладка `out/<class>/...`) для ревью качества разметки или датасета под
+  классификатор. CLI: `cvlib crops images/ labels/ --out crops/`. Тесты: `tests/test_crops.py`.
 
-- [x] **pre-commit hook** `.pre-commit-config.yaml`
-  `ruff check --fix` + `ruff format`, чтобы не гонять руками.
+## P2 — медиа и отчётность
 
-- [x] **Notebook-примеры** `notebooks/usage_examples.ipynb`
-  Самодостаточный ноутбук: `inspect_dataset`, `find_errors`/`render_errors`, `show_batch`
-  (рядом с прежним `viz_test.ipynb`).
+- [ ] **Видео-инференс** `src/cv_lib/infer/video.py`
+  `predict_video(model, src, out=None, save_labels=False, stride=1)` — поток кадров →
+  аннотированное видео и/или per-frame YOLO-лейблы. CLI: `cvlib infer clip.mp4 --out out.mp4`.
+  Тесты: `tests/test_infer_video.py` (синтетический клип из нескольких кадров).
 
-## P3 — приятные мелочи
+- [ ] **Сводный отчёт по eval** `src/cv_lib/report.py`
+  `build_report(eval_results, output="report.html")` — единый HTML/Markdown: mAP-таблица +
+  confusion matrix + per-class + FP/FN тайлы (`viz.errors`) + class distribution. Чтобы
+  делиться результатом прогона одним файлом. CLI: `cvlib report`. Тесты: `tests/test_report.py`.
 
-- [x] **`__version__`** в `cv_lib/__init__.py` + `cvlib --version` / `-V` (PR #4 + интеграция в CLI).
-- [x] **Структурное логирование** — loguru, общий `--verbose` (`add_verbose`/`setup_logging`),
-  статус-сообщения через `logger`, таблицы остаются на `print` (PR #4 + перенос в пакет `cli/`).
-- [x] **Сравнение прогонов** — `scripts/compare_runs.py` + подкоманда `cvlib compare-runs`
-  (configs из `train_config.json` + лучшие метрики из `results.csv`).
+- [ ] **Экспорт YOLO → COCO / Pascal VOC** расширить `src/cv_lib/data/convert.py`
+  `yolo_to_coco(...)` / `yolo_to_voc(...)` — обратное направление к существующему импорту,
+  для интеропа и сабмишенов. CLI: `cvlib convert labels/ --to coco --out ann.json`.
+  Тесты: расширить `tests/test_data_convert.py` (round-trip YOLO↔COCO).
+
+---
+
+## Сделано (история)
+
+**P0 — issue #1/#2/#3:** единый CLI `cvlib`, сборка как библиотеки (lazy public API),
+CVAT CSV → YOLO + `cvat-query`, генерация `dvc.yaml`.
+**P1:** train/val/test split + `data.yaml`, class distribution chart, превью аугментаций
+(`augment_preview`), `cvlib export` (ONNX/TensorRT).
+**P2:** CI workflow (ruff + pytest), покрытие тестами core-модулей, pre-commit, notebook-примеры.
+**P3:** `__version__` + `cvlib --version`, структурное логирование (loguru/`--verbose`),
+сравнение прогонов (`compare-runs`).
 
 ---
 
