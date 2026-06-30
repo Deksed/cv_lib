@@ -116,79 +116,143 @@ def _resolve_label_path(image_path: Path) -> Path:
     return same_dir  # will be flagged as missing by caller
 
 
+def _model_class_names(results, model) -> list[str]:
+    """Ordered class names from the model's own prediction (``names`` dict)."""
+    src = getattr(results, "names", None) or getattr(model, "names", None)
+    if isinstance(src, dict):
+        return [src[i] for i in sorted(src)]
+    return list(src) if src else []
+
+
 def compare_gt_pred(
     image_path: str | Path,
-    model_path: str | Path,
-    class_names: list[str],
+    model_path,
+    class_names: list[str] | None = None,
     conf_threshold: float = 0.25,
     label_path: str | Path | None = None,
+    csv_path: str | Path | None = None,
+    axis: str = "horizontal",
     output_path: str | Path | None = None,
     show: bool = True,
 ) -> np.ndarray:
     """
-    Side-by-side comparison: left = GT, right = model predictions.
+    GT vs model predictions in two panels (left/right or top/bottom).
 
     Args:
-        image_path:     path to the image file
-        model_path:     path to a .pt Ultralytics model
-        class_names:    ordered list of class names matching the label indices
+        image_path:     path to the image file (or, with ``csv_path``, just the
+                        image name — the path is taken from the CSV's
+                        ``image_path`` column when the given path is missing)
+        model_path:     path to a ``.pt`` Ultralytics model **or** an already
+                        loaded ``YOLO`` instance (pass the latter to reuse one
+                        model across many calls instead of reloading each time)
+        class_names:    ordered class names; if None, taken from the model's own
+                        predictions (``results.names``)
         conf_threshold: minimum confidence to show a prediction
         label_path:     explicit path to .txt label; auto-resolved if None
+        csv_path:       CVAT CSV export to source GT boxes and the image path
+                        from (instead of the YOLO dataset); the matching row's
+                        path + any CVAT link column are printed
+        axis:           ``"horizontal"`` (side-by-side, default) or
+                        ``"vertical"`` (stacked top/bottom — handier for wide
+                        frames that would otherwise be tiny side-by-side)
         output_path:    if set, saves the result image here
         show:           display with cv2.imshow (blocks until key press)
 
     Returns:
-        side_by_side BGR image as np.ndarray
+        the combined BGR image as np.ndarray
     """
-    from ultralytics import YOLO  # imported lazily — not everyone installs it
+    # Accept a path (load once) or a pre-loaded model (reuse across calls).
+    from cv_lib.data.autolabel import _load_model
 
+    model = _load_model(model_path)
     image_path = Path(image_path)
+
+    # When a CVAT CSV is given, it is the source of truth for the image path and
+    # the GT boxes (compare straight from the export, not a YOLO dataset).
+    record = None
+    if csv_path is not None:
+        from cv_lib.data.convert import cvat_csv_gt
+
+        records = cvat_csv_gt(csv_path, class_names=class_names)
+        record = records.get(image_path.name) or records.get(image_path.stem)
+        if record and record.get("image_path") and not image_path.exists():
+            image_path = Path(record["image_path"])
+
     img = cv2.imread(str(image_path))
     if img is None:
         raise FileNotFoundError(f"Cannot read image: {image_path}")
 
     h, w = img.shape[:2]
 
-    # --- Ground truth ---
-    resolved_label = Path(label_path) if label_path else _resolve_label_path(image_path)
-    gt_boxes, gt_classes = load_yolo_gt(resolved_label, w, h)
-    gt_panel = _draw_boxes(img, gt_boxes, gt_classes, class_names)
-    _add_panel_label(gt_panel, f"GT  ({len(gt_boxes)} boxes)")
-
-    # --- Predictions ---
-    model = YOLO(str(model_path))
+    # --- Predictions (single pass; also the fallback source of class names) ---
     results = model(str(image_path), conf=conf_threshold, verbose=False)[0]
+    n_pred = len(results.boxes)
+    pred_boxes = results.boxes.xyxy.cpu().numpy() if n_pred else np.zeros((0, 4))
+    pred_classes = results.boxes.cls.cpu().numpy().astype(int) if n_pred else np.zeros(0, dtype=int)
+    pred_scores = results.boxes.conf.cpu().numpy() if n_pred else np.zeros(0)
 
-    pred_boxes = results.boxes.xyxy.cpu().numpy() if len(results.boxes) else np.zeros((0, 4))
-    pred_classes = results.boxes.cls.cpu().numpy().astype(int) if len(results.boxes) else np.zeros(0, dtype=int)
-    pred_scores = results.boxes.conf.cpu().numpy() if len(results.boxes) else np.zeros(0)
+    names = list(class_names) if class_names else _model_class_names(results, model)
 
-    pred_panel = _draw_boxes(img, pred_boxes, pred_classes, class_names, scores=pred_scores)
-    _add_panel_label(pred_panel, f"Pred  ({len(pred_boxes)} boxes, conf≥{conf_threshold})")
+    # --- Ground truth ---
+    if record is not None:
+        gt_boxes = (
+            np.asarray(record["boxes"], dtype=np.float32)
+            if record["boxes"]
+            else np.zeros((0, 4), dtype=np.float32)
+        )
+        gt_ids = []
+        for label in record["labels"]:
+            if label not in names:
+                names.append(label)  # extend so the real CVAT label still renders
+            gt_ids.append(names.index(label))
+        gt_classes = np.asarray(gt_ids, dtype=np.int32)
+        meta = record.get("meta", {})
+        link = next(
+            (v for k, v in meta.items() if v and any(t in k.lower() for t in ("cvat", "url", "link"))),
+            "",
+        )
+        print(f"[compare] {image_path}" + (f"  cvat: {link}" if link else ""))
+    else:
+        resolved_label = Path(label_path) if label_path else _resolve_label_path(image_path)
+        gt_boxes, gt_classes = load_yolo_gt(resolved_label, w, h)
 
-    # --- Combine ---
-    divider = np.full((h, 4, 3), 80, dtype=np.uint8)
-    side_by_side = np.concatenate([gt_panel, divider, pred_panel], axis=1)
+    # Per-box confidence print (issue #22): one line per kept prediction.
+    for (x1, y1, x2, y2), cid, score in zip(pred_boxes.astype(int), pred_classes, pred_scores):
+        label = names[cid] if 0 <= cid < len(names) else str(cid)
+        print(f"  [pred] {label:<14} conf={float(score):.3f}  box=({x1},{y1},{x2},{y2})")
+
+    gt_panel = _draw_boxes(img, gt_boxes, gt_classes, names)
+    _add_panel_label(gt_panel, f"GT  ({len(gt_boxes)} boxes)")
+    pred_panel = _draw_boxes(img, pred_boxes, pred_classes, names, scores=pred_scores)
+    _add_panel_label(pred_panel, f"Pred  ({n_pred} boxes, conf≥{conf_threshold})")
+
+    # --- Combine: side-by-side or stacked ---
+    if axis == "vertical":
+        divider = np.full((4, w, 3), 80, dtype=np.uint8)
+        combined = np.concatenate([gt_panel, divider, pred_panel], axis=0)
+    else:
+        divider = np.full((h, 4, 3), 80, dtype=np.uint8)
+        combined = np.concatenate([gt_panel, divider, pred_panel], axis=1)
 
     if output_path:
-        cv2.imwrite(str(output_path), side_by_side)
+        cv2.imwrite(str(output_path), combined)
 
     if show:
         if _in_notebook():
             import matplotlib.pyplot as plt
-            rgb = cv2.cvtColor(side_by_side, cv2.COLOR_BGR2RGB)
-            fig, ax = plt.subplots(figsize=(min(side_by_side.shape[1] / 72, 24), 8))
+            rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
+            fig, ax = plt.subplots(figsize=(min(combined.shape[1] / 72, 24), 8))
             ax.imshow(rgb)
             ax.axis("off")
             fig.tight_layout()
             plt.show()
         else:
             win = f"compare — {image_path.name}"
-            cv2.imshow(win, side_by_side)
+            cv2.imshow(win, combined)
             cv2.waitKey(0)
             cv2.destroyWindow(win)
 
-    return side_by_side
+    return combined
 
 
 def _add_panel_label(panel: np.ndarray, text: str) -> None:

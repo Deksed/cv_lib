@@ -107,3 +107,75 @@ def test_compare_gt_pred_side_by_side_shape(tmp_path: Path, monkeypatch):
     # two panels (w each) + a 4px divider
     assert result.shape == (h, w * 2 + 4, 3)
     assert out_path.exists()
+
+
+def test_compare_gt_pred_vertical_stacks(tmp_path: Path, monkeypatch):
+    img = np.zeros((60, 80, 3), dtype=np.uint8)
+    img_path = tmp_path / "frame.jpg"
+    cv2.imwrite(str(img_path), img)
+    (tmp_path / "frame.txt").write_text("0 0.5 0.5 0.4 0.4\n")
+
+    import ultralytics
+
+    monkeypatch.setattr(ultralytics, "YOLO", _FakeYOLO)
+
+    result = compare_gt_pred(
+        img_path, "model.pt", class_names=["car"], axis="vertical", show=False
+    )
+    h, w = img.shape[:2]
+    # two panels (h each) stacked + a 4px divider, width unchanged
+    assert result.shape == (h * 2 + 4, w, 3)
+
+
+class _Tensor:
+    """Minimal stand-in for a torch tensor: .cpu().numpy() → ndarray."""
+
+    def __init__(self, arr):
+        self._arr = np.asarray(arr)
+
+    def cpu(self):
+        return self
+
+    def numpy(self):
+        return self._arr
+
+
+class _FakeBoxesOne:
+    def __init__(self):
+        self.xyxy = _Tensor([[10.0, 12.0, 50.0, 48.0]])
+        self.cls = _Tensor([0.0])
+        self.conf = _Tensor([0.91])
+
+    def __len__(self):
+        return 1
+
+
+class _FakeResultNamed:
+    names = {0: "car"}
+    boxes = _FakeBoxesOne()
+
+
+class _FakeModelObj:
+    """A pre-loaded model: reused as-is (not reloaded), exposes .names."""
+
+    names = {0: "car"}
+
+    def __call__(self, *a, **k):
+        return [_FakeResultNamed()]
+
+
+def test_compare_gt_pred_reuses_model_and_derives_names(tmp_path: Path, capsys):
+    img = np.zeros((60, 80, 3), dtype=np.uint8)
+    img_path = tmp_path / "frame.jpg"
+    cv2.imwrite(str(img_path), img)
+    (tmp_path / "frame.txt").write_text("0 0.5 0.5 0.4 0.4\n")
+
+    model = _FakeModelObj()  # passed as an object → no YOLO(...) reload
+    result = compare_gt_pred(img_path, model, show=False)  # class_names=None → from model
+
+    h, w = img.shape[:2]
+    assert result.shape == (h, w * 2 + 4, 3)
+    # per-box confidence print uses the model-derived class name
+    out = capsys.readouterr().out
+    assert "[pred] car" in out
+    assert "conf=0.910" in out
