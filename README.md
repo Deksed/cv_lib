@@ -360,12 +360,23 @@ from cv_lib.viz import compare_gt_pred, load_yolo_gt, show_batch, find_errors, r
 ```python
 result = compare_gt_pred(
     image_path="data/images/frame_042.jpg",
-    model_path="runs/train/best.pt",
-    class_names=["car", "person"],
+    model_path="runs/train/best.pt",   # путь .pt ИЛИ уже загруженный YOLO (переиспользование)
+    class_names=["car", "person"],     # опц.: если None — берётся из predict (results.names)
     conf_threshold=0.25,
+    axis="vertical",                   # "horizontal" (по умолч.) | "vertical" для широких кадров
     output_path="out.jpg",
     show=True,
-)  # → np.ndarray BGR
+)  # → np.ndarray BGR; печатает путь/ссылку CVAT и уверенность по каждому боксу
+```
+
+Чтобы не перезагружать веса на каждый кадр, загрузи модель один раз и передавай
+объект:
+
+```python
+from ultralytics import YOLO
+model = YOLO("runs/train/best.pt")
+for frame in frames:
+    compare_gt_pred(frame, model, show=False, output_path=f"cmp/{frame.name}")
 ```
 
 #### `show_batch()`

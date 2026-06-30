@@ -13,10 +13,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("image", help="Path to the image file.")
     parser.add_argument("--model", required=True, help="Path to Ultralytics .pt model.")
 
-    names_group = parser.add_mutually_exclusive_group(required=True)
+    names_group = parser.add_mutually_exclusive_group()
     names_group.add_argument(
         "--names", nargs="+", metavar="NAME",
-        help="Class names in order, e.g. --names car person.",
+        help="Class names in order; if omitted, taken from the model's predictions.",
     )
     names_group.add_argument(
         "--data", metavar="YAML",
@@ -26,6 +26,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--label", default=None,
         help="Explicit path to YOLO .txt label (auto-resolved if omitted).",
+    )
+    parser.add_argument(
+        "--csv", default=None,
+        help="CVAT CSV export to source GT boxes and the image path from.",
+    )
+    parser.add_argument(
+        "--axis", choices=["horizontal", "vertical"], default="horizontal",
+        help="Panel layout: side-by-side (default) or stacked top/bottom.",
     )
     parser.add_argument(
         "--conf", type=float, default=0.25,
@@ -54,6 +62,8 @@ def run(args: argparse.Namespace) -> None:
         class_names=class_names,
         conf_threshold=args.conf,
         label_path=args.label,
+        csv_path=args.csv,
+        axis=args.axis,
         output_path=args.output,
         show=not args.no_show,
     )
