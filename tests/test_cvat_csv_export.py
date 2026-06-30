@@ -24,9 +24,10 @@ from cv_lib.data.convert import (
 
 
 class _FakeBoxes:
-    def __init__(self, xyxy, cls):
+    def __init__(self, xyxy, cls, conf=None):
         self.xyxy = np.array(xyxy, dtype=float)
         self.cls = np.array(cls, dtype=float)
+        self.conf = np.array(conf if conf is not None else [0.0] * len(cls), dtype=float)
 
     def __len__(self):
         return len(self.xyxy)
@@ -39,8 +40,24 @@ class _FakeModel:
 
     def predict(self, source, **kwargs):
         result = SimpleNamespace(
-            boxes=_FakeBoxes([[10, 20, 110, 140]], [0.0]),
+            boxes=_FakeBoxes([[10, 20, 110, 140]], [0.0], conf=[0.83]),
+            masks=None,
             orig_shape=(200, 320),  # (h, w)
+        )
+        return [result]
+
+
+class _FakeSegModel:
+    """Seg model: same box plus a triangle mask via result.masks.xy."""
+
+    names = {0: "car", 1: "person"}
+
+    def predict(self, source, **kwargs):
+        masks = SimpleNamespace(xy=[np.array([[10, 20], [110, 20], [60, 140]], dtype=float)])
+        result = SimpleNamespace(
+            boxes=_FakeBoxes([[10, 20, 110, 140]], [0.0], conf=[0.83]),
+            masks=masks,
+            orig_shape=(200, 320),
         )
         return [result]
 
@@ -153,7 +170,7 @@ CSV_GT = """\
 image_name,image_id,job_id,image_width,image_height,instance_label,instance_shape,instance_points,bbox_x_tl,bbox_y_tl,bbox_x_br,bbox_y_br,task_id,task_name,task_assignee,image_path,cvat_url
 frame.jpg,1,9,320,200,car,rectangle,,10,20,110,140,3,batch,alice,raw/frame.jpg,https://cvat/9
 frame.jpg,1,9,320,200,person,rectangle,,0,0,40,80,3,batch,alice,raw/frame.jpg,https://cvat/9
-frame.jpg,1,9,320,200,tree,polygon,"5,5 8,9",0,0,0,0,3,batch,alice,raw/frame.jpg,https://cvat/9
+frame.jpg,1,9,320,200,tree,polygon,"5,5;60,5;30,40",0,0,0,0,3,batch,alice,raw/frame.jpg,https://cvat/9
 """
 
 
@@ -173,6 +190,65 @@ def test_cvat_csv_gt_parses_rectangles(tmp_path: Path):
     assert rec["boxes"][0] == [10.0, 20.0, 110.0, 140.0]
     # meta retains the extra cvat link column for the viz layer
     assert rec["meta"]["cvat_url"] == "https://cvat/9"
+    # rectangle rows have no polygon
+    assert rec["polygons"] == [None, None]
+
+
+def test_cvat_csv_gt_includes_polygons_when_requested(tmp_path: Path):
+    csv = tmp_path / "gt.csv"
+    csv.write_text(CSV_GT, encoding="utf-8")
+    records = cvat_csv_gt(
+        csv, class_names=["car", "person", "tree"], shapes=("rectangle", "polygon")
+    )
+    rec = records["frame.jpg"]
+    assert rec["labels"] == ["car", "person", "tree"]
+    # polygon points parsed; its box derived from point bounds (bbox cols were 0)
+    assert rec["polygons"][2] == [(5.0, 5.0), (60.0, 5.0), (30.0, 40.0)]
+    assert rec["boxes"][2] == [5.0, 5.0, 60.0, 40.0]
+    assert rec["polygons"][0] is None  # rectangle
+
+
+# ---------------------------------------------------------------------------
+# polygons (seg models) and confidence column
+# ---------------------------------------------------------------------------
+
+def test_predictions_to_cvat_csv_writes_polygons(tmp_path: Path):
+    images = tmp_path / "images"
+    _make_images(images, ["a.jpg"])
+    out = tmp_path / "seg.csv"
+
+    predictions_to_cvat_csv(_FakeSegModel(), images, out, class_names=["car", "person"])
+    _, rows = _read_cvat_csv(out)
+    assert rows[0]["instance_shape"] == "polygon"
+    assert rows[0]["instance_points"] == "10.00,20.00;110.00,20.00;60.00,140.00"
+    # bbox still filled from the detection box
+    assert rows[0]["bbox_x_tl"] == "10.00" and rows[0]["bbox_y_br"] == "140.00"
+
+
+def test_predictions_to_cvat_csv_masks_false_keeps_rectangles(tmp_path: Path):
+    images = tmp_path / "images"
+    _make_images(images, ["a.jpg"])
+    out = tmp_path / "rect.csv"
+
+    predictions_to_cvat_csv(
+        _FakeSegModel(), images, out, class_names=["car", "person"], masks=False
+    )
+    _, rows = _read_cvat_csv(out)
+    assert rows[0]["instance_shape"] == "rectangle"
+    assert rows[0]["instance_points"] == ""
+
+
+def test_predictions_to_cvat_csv_save_conf(tmp_path: Path):
+    images = tmp_path / "images"
+    _make_images(images, ["a.jpg"])
+    out = tmp_path / "pred.csv"
+
+    predictions_to_cvat_csv(
+        _FakeModel(), images, out, class_names=["car", "person"], save_conf=True
+    )
+    header, rows = _read_cvat_csv(out)
+    assert "confidence" in header
+    assert rows[0]["confidence"] == "0.8300"
 
 
 # ---------------------------------------------------------------------------

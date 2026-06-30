@@ -509,7 +509,8 @@ coco_json_to_yolo("instances_val.json", out_dir="labels/")
 
 Прогоняет Ultralytics-модель по папке и пишет детекции в плоский CVAT CSV
 (`CVAT_CSV_COLUMNS`), готовый к заливке обратно в CVAT для ручной правки.
-**Только rectangle** (`instance_shape="rectangle"`, `instance_points` пуст).
+По умолчанию rectangle; для seg-модели `masks="auto"` пишет `polygon`-строки с
+`instance_points` (`"x1,y1;x2,y2;…"`), `bbox_*` при этом тоже заполнен.
 Служебные поля, которых нет у модели (`image_id`, `job_id`, `task_id`,
 `task_name`, `task_assignee`, `image_path` + любые доп. колонки вроде ссылки на
 CVAT), джойнятся из шаблонного CSV по `image_name`:
@@ -524,6 +525,8 @@ n_rows = predictions_to_cvat_csv(
     template_csv="cvat_template.csv",  # опц.: метаданные/ссылки по image_name
     class_names=["car", "person"],   # иначе берётся из model.names
     conf=0.25, imgsz=640,
+    masks="auto",                    # seg-модель → polygon-строки; False = только bbox
+    save_conf=True,                  # доп. колонка "confidence" для фильтрации
 )
 # → export.csv: по строке на детекцию; кадры без детекций строк не дают
 ```
@@ -532,7 +535,7 @@ n_rows = predictions_to_cvat_csv(
 
 ```bash
 cvlib infer --model best.pt --images dataset/images/val \
-    --cvat-csv runs/preann/export.csv --template cvat_template.csv
+    --cvat-csv runs/preann/export.csv --template cvat_template.csv --cvat-conf
 ```
 
 Для готовой YOLO-разметки (а не предсказаний) — симметричный экспорт

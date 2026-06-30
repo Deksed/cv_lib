@@ -87,6 +87,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Template CVAT CSV: joins bookkeeping/link columns by image_name into --cvat-csv.",
     )
     parser.add_argument(
+        "--cvat-conf", action="store_true",
+        help="Add a 'confidence' column to --cvat-csv with each detection's score.",
+    )
+    parser.add_argument(
         "--imgsz", type=int, default=640,
         help="Inference image size (default: 640).",
     )
@@ -141,6 +145,8 @@ def run(args: argparse.Namespace) -> None:
 
         extra_cols, cvat_by_name = _load_cvat_template(args.template)
         cvat_columns = list(CVAT_CSV_COLUMNS) + extra_cols
+        if args.cvat_conf and "confidence" not in cvat_columns:
+            cvat_columns.append("confidence")
 
     predict_kwargs: dict = {
         "conf": args.conf,
@@ -183,7 +189,10 @@ def run(args: argparse.Namespace) -> None:
             labels = [class_names[c] if c < len(class_names) else str(c) for c in class_ids]
             meta = cvat_by_name.get(img_path.name, {})
             cvat_rows.extend(
-                _cvat_rows_for_image(img_path.name, w, h, boxes_xyxy, labels, meta, cvat_columns)
+                _cvat_rows_for_image(
+                    img_path.name, w, h, boxes_xyxy, labels, meta, cvat_columns,
+                    confidences=confs if args.cvat_conf else None,
+                )
             )
 
     if args.tiled:

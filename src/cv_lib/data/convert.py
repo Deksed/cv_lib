@@ -364,8 +364,13 @@ def cvat_csv_gt(
     Returns:
         dict mapping ``image_name`` → record with keys ``image_path`` (str),
         ``width``/``height`` (int), ``boxes`` (list of ``[x1, y1, x2, y2]`` px),
-        ``class_ids`` (list[int]), ``labels`` (list[str]) and ``meta`` (the first
-        row for that image, carrying bookkeeping/extra columns).
+        ``class_ids`` (list[int]), ``labels`` (list[str]), ``polygons`` (list of
+        ``[(x, y), ...]`` or ``None`` per instance) and ``meta`` (the first row
+        for that image, carrying bookkeeping/extra columns).
+
+    To include polygons pass e.g. ``shapes=("rectangle", "polygon")`` (or
+    ``shapes=None`` for every shape); a polygon's box falls back to the bounds of
+    its points when the ``bbox_*`` columns are absent/zero.
     """
     _, rows = _read_cvat_csv(csv_path)
 
@@ -403,6 +408,7 @@ def cvat_csv_gt(
                 "boxes": [],
                 "class_ids": [],
                 "labels": [],
+                "polygons": [],
                 "meta": row,
             }
             records[name] = rec
@@ -412,16 +418,25 @@ def cvat_csv_gt(
         label = row.get("instance_label", "")
         if label not in class_map:
             continue
+
+        poly = _parse_points(row.get("instance_points", "")) or None
         try:
             xtl = float(row["bbox_x_tl"])
             ytl = float(row["bbox_y_tl"])
             xbr = float(row["bbox_x_br"])
             ybr = float(row["bbox_y_br"])
         except (KeyError, ValueError):
-            continue
+            xtl = ytl = xbr = ybr = 0.0
+        # Polygon with no usable bbox columns → derive the box from its points.
+        if poly and xtl == ytl == xbr == ybr == 0.0:
+            xs = [p[0] for p in poly]
+            ys = [p[1] for p in poly]
+            xtl, ytl, xbr, ybr = min(xs), min(ys), max(xs), max(ys)
+
         rec["boxes"].append([xtl, ytl, xbr, ybr])
         rec["class_ids"].append(class_map[label])
         rec["labels"].append(label)
+        rec["polygons"].append(poly)
 
     return records
 
@@ -682,11 +697,21 @@ def _cvat_rows_for_image(
     labels: list[str],
     meta: dict[str, str],
     columns: list[str],
+    *,
+    polygons=None,
+    confidences=None,
+    conf_column: str = "confidence",
 ) -> list[dict[str, str]]:
-    """Build one CVAT CSV row per box (rectangles only) for a single image.
+    """Build one CVAT CSV row per instance for a single image.
 
     Bookkeeping/extra columns are seeded from ``meta`` (the template row); the
     per-detection fields (size, label, shape, bbox corners) are then overwritten.
+
+    ``polygons`` (parallel to ``boxes_xyxy``; a sequence of ``(x, y)`` point
+    lists, or ``None`` per item) turns an instance into a ``polygon`` row —
+    ``instance_points`` is filled and ``bbox_*`` still carries the box. When
+    ``confidences`` is given and ``conf_column`` is in ``columns``, the score is
+    written there.
     """
     base = {c: meta.get(c, "") for c in columns}
     base["image_name"] = image_name
@@ -695,16 +720,45 @@ def _cvat_rows_for_image(
     base["instance_shape"] = "rectangle"
     base["instance_points"] = ""
 
+    write_conf = confidences is not None and conf_column in columns
+
     rows: list[dict[str, str]] = []
-    for (x1, y1, x2, y2), label in zip(boxes_xyxy, labels):
+    for i, ((x1, y1, x2, y2), label) in enumerate(zip(boxes_xyxy, labels)):
         row = dict(base)
         row["instance_label"] = label
         row["bbox_x_tl"] = f"{float(x1):.2f}"
         row["bbox_y_tl"] = f"{float(y1):.2f}"
         row["bbox_x_br"] = f"{float(x2):.2f}"
         row["bbox_y_br"] = f"{float(y2):.2f}"
+        poly = polygons[i] if polygons is not None else None
+        if poly is not None and len(poly):
+            row["instance_shape"] = "polygon"
+            row["instance_points"] = _format_points(poly)
+        if write_conf:
+            row[conf_column] = f"{float(confidences[i]):.4f}"
         rows.append(row)
     return rows
+
+
+def _format_points(points) -> str:
+    """Serialize polygon points → CVAT ``"x1,y1;x2,y2;..."`` (repo convention)."""
+    return ";".join(f"{float(x):.2f},{float(y):.2f}" for x, y in points)
+
+
+def _parse_points(text: str) -> list[tuple[float, float]]:
+    """Parse a CVAT ``instance_points`` string into ``[(x, y), ...]``.
+
+    Accepts ``;``-separated ``x,y`` pairs (repo convention) and tolerates
+    whitespace-separated pairs.
+    """
+    pts: list[tuple[float, float]] = []
+    for chunk in text.replace(";", " ").split():
+        x, _, y = chunk.partition(",")
+        try:
+            pts.append((float(x), float(y)))
+        except ValueError:
+            continue
+    return pts
 
 
 def _write_cvat_csv(rows: list[dict[str, str]], out_csv: str | Path, columns: list[str]) -> None:
@@ -730,14 +784,22 @@ def predictions_to_cvat_csv(
     iou: float = 0.45,
     imgsz: int = 640,
     device: str | None = None,
+    masks: bool | str = "auto",
+    save_conf: bool = False,
+    conf_column: str = "confidence",
     extensions: tuple[str, ...] = _IMAGE_EXTENSIONS,
 ) -> int:
     """Run an Ultralytics detector over a folder and write a CVAT CSV export.
 
     The reverse of :func:`cvat_csv_to_yolo`: model detections become per-instance
     rows in the flat CVAT CSV schema (:data:`CVAT_CSV_COLUMNS`), ready to upload
-    back into CVAT for human correction. **Rectangles only** —
-    ``instance_shape`` is always ``"rectangle"`` and ``instance_points`` empty.
+    back into CVAT for human correction.
+
+    Rectangles by default. For a segmentation model, ``masks`` controls polygon
+    output: ``"auto"`` (default) emits ``polygon`` rows with ``instance_points``
+    whenever the result carries masks, ``True`` forces it, ``False`` keeps boxes
+    only. ``bbox_*`` is always filled (from the detection box) so rectangle-only
+    consumers keep working.
 
     Bookkeeping columns a model cannot produce (``image_id``, ``job_id``,
     ``task_id``, ``task_name``, ``task_assignee``, ``image_path``) — plus any
@@ -755,6 +817,9 @@ def predictions_to_cvat_csv(
         iou:          NMS IoU threshold.
         imgsz:        Inference image size.
         device:       Optional device override (e.g. ``"cpu"``, ``"0"``).
+        masks:        Polygon output for seg models — ``"auto"`` | ``True`` | ``False``.
+        save_conf:    Add a ``conf_column`` column with each detection's score.
+        conf_column:  Name of the confidence column (default ``"confidence"``).
         extensions:   Image extensions to include.
 
     Returns:
@@ -771,6 +836,8 @@ def predictions_to_cvat_csv(
 
     extra_cols, by_name = _load_cvat_template(template_csv)
     columns = list(CVAT_CSV_COLUMNS) + extra_cols
+    if save_conf and conf_column not in columns:
+        columns.append(conf_column)
 
     images_dir = Path(images_dir)
     image_files = sorted(p for p in images_dir.rglob("*") if p.suffix.lower() in extensions)
@@ -790,8 +857,25 @@ def predictions_to_cvat_csv(
         cls = boxes.cls.cpu().numpy() if hasattr(boxes.cls, "cpu") else np.asarray(boxes.cls)
         cls = cls.astype(int)
         labels = [class_names[c] if 0 <= c < len(class_names) else str(c) for c in cls]
+
+        result_masks = getattr(result, "masks", None)
+        polygons = None
+        if masks and result_masks is not None and getattr(result_masks, "xy", None) is not None:
+            polygons = list(result_masks.xy)
+
+        confidences = None
+        if save_conf:
+            confidences = (
+                boxes.conf.cpu().numpy() if hasattr(boxes.conf, "cpu") else np.asarray(boxes.conf)
+            )
+
         meta = by_name.get(img_path.name, {})
-        all_rows.extend(_cvat_rows_for_image(img_path.name, w, h, xyxy, labels, meta, columns))
+        all_rows.extend(
+            _cvat_rows_for_image(
+                img_path.name, w, h, xyxy, labels, meta, columns,
+                polygons=polygons, confidences=confidences, conf_column=conf_column,
+            )
+        )
 
     _write_cvat_csv(all_rows, out_csv, columns)
     return len(all_rows)
