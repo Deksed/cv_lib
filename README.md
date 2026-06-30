@@ -535,6 +535,22 @@ cvlib infer --model best.pt --images dataset/images/val \
     --cvat-csv runs/preann/export.csv --template cvat_template.csv
 ```
 
+Для готовой YOLO-разметки (а не предсказаний) — симметричный экспорт
+`yolo_to_cvat_csv()` (как `yolo_to_coco`/`yolo_to_voc`):
+
+```python
+from cv_lib.data.convert import yolo_to_cvat_csv
+
+yolo_to_cvat_csv(
+    images_dir="dataset/images/val",
+    labels_dir="dataset/labels/val",   # inferred from images path if None
+    out_csv="gt.csv",
+    class_names=["car", "person"],
+    template_csv="cvat_template.csv",  # опц.
+)
+# CLI: cvlib convert labels/ --to cvat-csv --images images/ --names car person --out gt.csv
+```
+
 #### `cvat_csv_gt()` — GT для отрисовки прямо из CVAT CSV
 
 CVAT CSV как источник истины для путей и боксов (туда удобно класть ссылку на

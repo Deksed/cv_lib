@@ -34,6 +34,7 @@ EXPECTED_EXPORTS = {
     "PipelineConfig",
     "yolo_to_coco",
     "yolo_to_voc",
+    "yolo_to_cvat_csv",
     "voc_to_yolo",
     "train_val_test_split",
     "SplitReport",

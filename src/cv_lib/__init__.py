@@ -56,6 +56,7 @@ _EXPORTS: dict[str, str] = {
     "PipelineConfig": "cv_lib.data.dvc_gen",
     "yolo_to_coco": "cv_lib.data.convert",
     "yolo_to_voc": "cv_lib.data.convert",
+    "yolo_to_cvat_csv": "cv_lib.data.convert",
     "voc_to_yolo": "cv_lib.data.convert",
     # data.split
     "train_val_test_split": "cv_lib.data.split",
@@ -141,6 +142,7 @@ if TYPE_CHECKING:
         query_cvat_csv,
         voc_to_yolo,
         yolo_to_coco,
+        yolo_to_cvat_csv,
         yolo_to_voc,
     )
     from cv_lib.data.crops import CropReport, extract_crops  # noqa: F401

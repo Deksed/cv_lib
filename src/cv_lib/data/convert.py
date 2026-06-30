@@ -603,6 +603,52 @@ def yolo_to_voc(
     return written
 
 
+def yolo_to_cvat_csv(
+    images_dir: str | Path,
+    labels_dir: str | Path | None,
+    out_csv: str | Path,
+    class_names: list[str],
+    *,
+    template_csv: str | Path | None = None,
+) -> int:
+    """Convert a YOLO dataset to a flat CVAT CSV export (the GT counterpart of
+    :func:`predictions_to_cvat_csv`).
+
+    One row per box, **rectangles only**. Bookkeeping/extra columns (task/job
+    ids, image_path, a CVAT link, …) are joined from ``template_csv`` by
+    ``image_name`` when given. Images with no boxes contribute no rows.
+
+    Args:
+        images_dir:   Directory of images (used for the per-image pixel size).
+        labels_dir:   Directory of YOLO ``.txt`` labels (inferred if ``None``).
+        out_csv:      Destination ``.csv`` path.
+        class_names:  Ordered class names (index = YOLO class id).
+        template_csv: Optional CVAT CSV supplying per-image metadata/extra columns.
+
+    Returns:
+        Number of instance rows written.
+    """
+    extra_cols, by_name = _load_cvat_template(template_csv)
+    columns = list(CVAT_CSV_COLUMNS) + extra_cols
+
+    all_rows: list[dict[str, str]] = []
+    for img_path, label_path in _iter_yolo_pairs(Path(images_dir), labels_dir):
+        boxes = _read_yolo_boxes(label_path)
+        if not boxes:
+            continue
+        iw, ih = _image_size(img_path)
+        xyxy = [
+            (cx * iw - w * iw / 2, cy * ih - h * ih / 2, cx * iw + w * iw / 2, cy * ih + h * ih / 2)
+            for _, cx, cy, w, h in boxes
+        ]
+        labels = [class_names[cid] if 0 <= cid < len(class_names) else str(cid) for cid, *_ in boxes]
+        meta = by_name.get(img_path.name, {})
+        all_rows.extend(_cvat_rows_for_image(img_path.name, iw, ih, xyxy, labels, meta, columns))
+
+    _write_cvat_csv(all_rows, out_csv, columns)
+    return len(all_rows)
+
+
 # ---------------------------------------------------------------------------
 # Ultralytics predictions → CVAT CSV (reverse of cvat_csv_to_yolo)
 # ---------------------------------------------------------------------------

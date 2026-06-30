@@ -19,6 +19,7 @@ from cv_lib.data.convert import (
     _write_cvat_csv,
     cvat_csv_gt,
     predictions_to_cvat_csv,
+    yolo_to_cvat_csv,
 )
 
 
@@ -192,3 +193,40 @@ def test_export_then_read_back_roundtrip(tmp_path: Path):
     assert rec["class_ids"] == [0]
     # the box the fake model emitted survives the write/parse round-trip
     assert rec["boxes"][0] == [10.0, 20.0, 110.0, 140.0]
+
+
+# ---------------------------------------------------------------------------
+# yolo_to_cvat_csv (GT export, counterpart of predictions_to_cvat_csv)
+# ---------------------------------------------------------------------------
+
+def test_yolo_to_cvat_csv_roundtrips_through_gt(tmp_path: Path):
+    images = tmp_path / "images"
+    _make_images(images, ["a.jpg"])  # 200h x 320w
+    labels = tmp_path / "labels"
+    labels.mkdir()
+    # one box: class 1, centre (0.5,0.5), w=0.25 h=0.5 → px (120,50,200,150)
+    (labels / "a.txt").write_text("1 0.5 0.5 0.25 0.5\n")
+
+    out = tmp_path / "gt.csv"
+    n = yolo_to_cvat_csv(images, labels, out, class_names=["car", "person"])
+    assert n == 1
+
+    rec = cvat_csv_gt(out, class_names=["car", "person"])["a.jpg"]
+    assert rec["labels"] == ["person"]
+    assert rec["class_ids"] == [1]
+    np.testing.assert_allclose(rec["boxes"][0], [120.0, 50.0, 200.0, 150.0], atol=1e-2)
+
+
+def test_yolo_to_cvat_csv_skips_empty_labels(tmp_path: Path):
+    images = tmp_path / "images"
+    _make_images(images, ["a.jpg", "b.jpg"])
+    labels = tmp_path / "labels"
+    labels.mkdir()
+    (labels / "a.txt").write_text("0 0.5 0.5 0.2 0.2\n")
+    (labels / "b.txt").write_text("")  # no boxes → no rows
+
+    out = tmp_path / "gt.csv"
+    n = yolo_to_cvat_csv(images, labels, out, class_names=["car"])
+    assert n == 1
+    _, rows = _read_cvat_csv(out)
+    assert {r["image_name"] for r in rows} == {"a.jpg"}
