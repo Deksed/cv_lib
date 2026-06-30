@@ -341,6 +341,91 @@ def cvat_csv_to_yolo(
     return class_map
 
 
+def cvat_csv_gt(
+    csv_path: str | Path,
+    *,
+    class_names: list[str] | None = None,
+    shapes: tuple[str, ...] | None = ("rectangle",),
+) -> dict[str, dict]:
+    """Parse a CVAT CSV export into per-image ground truth for visualization.
+
+    Unlike :func:`cvat_csv_to_yolo` (which writes YOLO ``.txt`` keyed by stem),
+    this keeps the CSV as the source of truth — including ``image_path`` and any
+    extra columns (e.g. a CVAT link) — so callers can draw/compare straight from
+    the export instead of a YOLO dataset.
+
+    Args:
+        csv_path:    path to the CVAT CSV export
+        class_names: ordered class names; inferred (first-seen) from
+            ``instance_label`` if None
+        shapes:      keep only these ``instance_shape`` values (case-insensitive);
+            None keeps every row with a valid bbox
+
+    Returns:
+        dict mapping ``image_name`` → record with keys ``image_path`` (str),
+        ``width``/``height`` (int), ``boxes`` (list of ``[x1, y1, x2, y2]`` px),
+        ``class_ids`` (list[int]), ``labels`` (list[str]) and ``meta`` (the first
+        row for that image, carrying bookkeeping/extra columns).
+    """
+    _, rows = _read_cvat_csv(csv_path)
+
+    shape_set = {s.lower() for s in shapes} if shapes is not None else None
+
+    def _shape_ok(row: dict[str, str]) -> bool:
+        return shape_set is None or row.get("instance_shape", "").lower() in shape_set
+
+    if class_names is None:
+        class_map: dict[str, int] = {}
+        for row in rows:
+            label = row.get("instance_label", "")
+            if label and _shape_ok(row) and label not in class_map:
+                class_map[label] = len(class_map)
+    else:
+        class_map = {name: i for i, name in enumerate(class_names)}
+
+    records: dict[str, dict] = {}
+    for row in rows:
+        name = row.get("image_name") or row.get("image_path")
+        if not name:
+            continue
+        name = Path(name).name
+        rec = records.get(name)
+        if rec is None:
+            try:
+                width = int(float(row.get("image_width", "0") or 0))
+                height = int(float(row.get("image_height", "0") or 0))
+            except ValueError:
+                width = height = 0
+            rec = {
+                "image_path": row.get("image_path") or name,
+                "width": width,
+                "height": height,
+                "boxes": [],
+                "class_ids": [],
+                "labels": [],
+                "meta": row,
+            }
+            records[name] = rec
+
+        if not _shape_ok(row):
+            continue
+        label = row.get("instance_label", "")
+        if label not in class_map:
+            continue
+        try:
+            xtl = float(row["bbox_x_tl"])
+            ytl = float(row["bbox_y_tl"])
+            xbr = float(row["bbox_x_br"])
+            ybr = float(row["bbox_y_br"])
+        except (KeyError, ValueError):
+            continue
+        rec["boxes"].append([xtl, ytl, xbr, ybr])
+        rec["class_ids"].append(class_map[label])
+        rec["labels"].append(label)
+
+    return records
+
+
 def query_cvat_csv(
     csv_path: str | Path,
     **filters: str,
@@ -516,3 +601,151 @@ def yolo_to_voc(
         ET.ElementTree(ann).write(out_dir / f"{img_path.stem}.xml", encoding="unicode")
         written += 1
     return written
+
+
+# ---------------------------------------------------------------------------
+# Ultralytics predictions → CVAT CSV (reverse of cvat_csv_to_yolo)
+# ---------------------------------------------------------------------------
+
+def _load_cvat_template(
+    template_csv: str | Path | None,
+) -> tuple[list[str], dict[str, dict[str, str]]]:
+    """Read a template CVAT CSV → (extra columns, image_name → first row).
+
+    Extra columns are those beyond :data:`CVAT_CSV_COLUMNS` (e.g. a CVAT link).
+    The per-image row supplies bookkeeping (task/job/image ids, image_path, …)
+    that a model cannot know; the first row seen for an image carries it.
+    """
+    if template_csv is None:
+        return [], {}
+    header, rows = _read_cvat_csv(template_csv)
+    extra = [c for c in header if c not in CVAT_CSV_COLUMNS]
+    by_name: dict[str, dict[str, str]] = {}
+    for row in rows:
+        name = row.get("image_name") or row.get("image_path")
+        if name:
+            by_name.setdefault(Path(name).name, row)
+    return extra, by_name
+
+
+def _cvat_rows_for_image(
+    image_name: str,
+    width: int,
+    height: int,
+    boxes_xyxy,
+    labels: list[str],
+    meta: dict[str, str],
+    columns: list[str],
+) -> list[dict[str, str]]:
+    """Build one CVAT CSV row per box (rectangles only) for a single image.
+
+    Bookkeeping/extra columns are seeded from ``meta`` (the template row); the
+    per-detection fields (size, label, shape, bbox corners) are then overwritten.
+    """
+    base = {c: meta.get(c, "") for c in columns}
+    base["image_name"] = image_name
+    base["image_width"] = str(int(width))
+    base["image_height"] = str(int(height))
+    base["instance_shape"] = "rectangle"
+    base["instance_points"] = ""
+
+    rows: list[dict[str, str]] = []
+    for (x1, y1, x2, y2), label in zip(boxes_xyxy, labels):
+        row = dict(base)
+        row["instance_label"] = label
+        row["bbox_x_tl"] = f"{float(x1):.2f}"
+        row["bbox_y_tl"] = f"{float(y1):.2f}"
+        row["bbox_x_br"] = f"{float(x2):.2f}"
+        row["bbox_y_br"] = f"{float(y2):.2f}"
+        rows.append(row)
+    return rows
+
+
+def _write_cvat_csv(rows: list[dict[str, str]], out_csv: str | Path, columns: list[str]) -> None:
+    """Write rows to a CVAT CSV (utf-8-sig, the encoding _read_cvat_csv expects)."""
+    import csv
+
+    out_csv = Path(out_csv)
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_csv, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def predictions_to_cvat_csv(
+    model,
+    images_dir: str | Path,
+    out_csv: str | Path,
+    *,
+    template_csv: str | Path | None = None,
+    class_names: list[str] | None = None,
+    conf: float = 0.25,
+    iou: float = 0.45,
+    imgsz: int = 640,
+    device: str | None = None,
+    extensions: tuple[str, ...] = _IMAGE_EXTENSIONS,
+) -> int:
+    """Run an Ultralytics detector over a folder and write a CVAT CSV export.
+
+    The reverse of :func:`cvat_csv_to_yolo`: model detections become per-instance
+    rows in the flat CVAT CSV schema (:data:`CVAT_CSV_COLUMNS`), ready to upload
+    back into CVAT for human correction. **Rectangles only** —
+    ``instance_shape`` is always ``"rectangle"`` and ``instance_points`` empty.
+
+    Bookkeeping columns a model cannot produce (``image_id``, ``job_id``,
+    ``task_id``, ``task_name``, ``task_assignee``, ``image_path``) — plus any
+    extra columns such as a CVAT link — are joined from ``template_csv`` by
+    ``image_name``. Without a template they stay blank. Images with no detections
+    contribute no rows.
+
+    Args:
+        model:        Ultralytics ``YOLO`` instance or path to a ``.pt`` file.
+        images_dir:   Directory of images (searched recursively).
+        out_csv:      Destination ``.csv`` path.
+        template_csv: Optional CVAT CSV supplying per-image metadata/extra columns.
+        class_names:  Class names by index; falls back to the model's ``names``.
+        conf:         Confidence threshold for kept detections.
+        iou:          NMS IoU threshold.
+        imgsz:        Inference image size.
+        device:       Optional device override (e.g. ``"cpu"``, ``"0"``).
+        extensions:   Image extensions to include.
+
+    Returns:
+        Number of instance rows written.
+    """
+    import numpy as np
+
+    from cv_lib.data.autolabel import _load_model
+
+    model = _load_model(model)
+    if class_names is None:
+        names = getattr(model, "names", None)
+        class_names = list(names.values()) if names else []
+
+    extra_cols, by_name = _load_cvat_template(template_csv)
+    columns = list(CVAT_CSV_COLUMNS) + extra_cols
+
+    images_dir = Path(images_dir)
+    image_files = sorted(p for p in images_dir.rglob("*") if p.suffix.lower() in extensions)
+
+    predict_kwargs: dict = {"conf": conf, "iou": iou, "imgsz": imgsz, "verbose": False}
+    if device is not None:
+        predict_kwargs["device"] = device
+
+    all_rows: list[dict[str, str]] = []
+    for img_path in image_files:
+        result = model.predict(source=str(img_path), **predict_kwargs)[0]
+        boxes = result.boxes
+        if boxes is None or not len(boxes):
+            continue
+        h, w = result.orig_shape
+        xyxy = boxes.xyxy.cpu().numpy() if hasattr(boxes.xyxy, "cpu") else np.asarray(boxes.xyxy)
+        cls = boxes.cls.cpu().numpy() if hasattr(boxes.cls, "cpu") else np.asarray(boxes.cls)
+        cls = cls.astype(int)
+        labels = [class_names[c] if 0 <= c < len(class_names) else str(c) for c in cls]
+        meta = by_name.get(img_path.name, {})
+        all_rows.extend(_cvat_rows_for_image(img_path.name, w, h, xyxy, labels, meta, columns))
+
+    _write_cvat_csv(all_rows, out_csv, columns)
+    return len(all_rows)

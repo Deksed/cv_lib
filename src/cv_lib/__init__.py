@@ -6,7 +6,7 @@ when a specific helper is first accessed.
 
     >>> import cv_lib
     >>> cv_lib.__version__
-    '0.1.0'
+    '0.2.0'
     >>> from cv_lib import inspect_dataset, cvat_csv_to_yolo, summarize_map
 
 Anything not listed in ``__all__`` is internal and may change without notice.
@@ -19,7 +19,7 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Public name → submodule it lives in. Drives both __all__ and lazy __getattr__.
 _EXPORTS: dict[str, str] = {
@@ -46,6 +46,8 @@ _EXPORTS: dict[str, str] = {
     "cvat_xml_to_yolo": "cv_lib.data.convert",
     "coco_json_to_yolo": "cv_lib.data.convert",
     "cvat_csv_to_yolo": "cv_lib.data.convert",
+    "cvat_csv_gt": "cv_lib.data.convert",
+    "predictions_to_cvat_csv": "cv_lib.data.convert",
     "query_cvat_csv": "cv_lib.data.convert",
     # data.dvc_gen
     "build_pipeline": "cv_lib.data.dvc_gen",
@@ -132,8 +134,10 @@ if TYPE_CHECKING:
     from cv_lib.data.autolabel import autolabel  # noqa: F401
     from cv_lib.data.convert import (  # noqa: F401
         coco_json_to_yolo,
+        cvat_csv_gt,
         cvat_csv_to_yolo,
         cvat_xml_to_yolo,
+        predictions_to_cvat_csv,
         query_cvat_csv,
         voc_to_yolo,
         yolo_to_coco,

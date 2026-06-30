@@ -25,6 +25,8 @@ EXPECTED_EXPORTS = {
     "cvat_xml_to_yolo",
     "coco_json_to_yolo",
     "cvat_csv_to_yolo",
+    "cvat_csv_gt",
+    "predictions_to_cvat_csv",
     "query_cvat_csv",
     "build_pipeline",
     "generate_dvc_yaml",

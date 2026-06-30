@@ -1,0 +1,194 @@
+"""Tests for predictions → CVAT CSV export and CVAT-CSV-sourced GT.
+
+Covers cv_lib.data.convert.predictions_to_cvat_csv (reverse of cvat_csv_to_yolo),
+the row/writer helpers, and cvat_csv_gt (per-image GT for visualization).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import cv2
+import numpy as np
+
+from cv_lib.data.convert import (
+    CVAT_CSV_COLUMNS,
+    _cvat_rows_for_image,
+    _read_cvat_csv,
+    _write_cvat_csv,
+    cvat_csv_gt,
+    predictions_to_cvat_csv,
+)
+
+
+class _FakeBoxes:
+    def __init__(self, xyxy, cls):
+        self.xyxy = np.array(xyxy, dtype=float)
+        self.cls = np.array(cls, dtype=float)
+
+    def __len__(self):
+        return len(self.xyxy)
+
+
+class _FakeModel:
+    """One detection per image: class 0 at pixel box (10,20,110,140), 200x320 img."""
+
+    names = {0: "car", 1: "person"}
+
+    def predict(self, source, **kwargs):
+        result = SimpleNamespace(
+            boxes=_FakeBoxes([[10, 20, 110, 140]], [0.0]),
+            orig_shape=(200, 320),  # (h, w)
+        )
+        return [result]
+
+
+def _make_images(d: Path, names: list[str]) -> None:
+    d.mkdir(parents=True)
+    for name in names:
+        cv2.imwrite(str(d / name), np.full((200, 320, 3), 50, np.uint8))
+
+
+# ---------------------------------------------------------------------------
+# row / writer helpers
+# ---------------------------------------------------------------------------
+
+def test_cvat_rows_for_image_fields():
+    columns = list(CVAT_CSV_COLUMNS)
+    rows = _cvat_rows_for_image(
+        "frame.jpg", 320, 200, [[10, 20, 110, 140]], ["car"], meta={}, columns=columns
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["image_name"] == "frame.jpg"
+    assert row["image_width"] == "320"
+    assert row["image_height"] == "200"
+    assert row["instance_label"] == "car"
+    assert row["instance_shape"] == "rectangle"
+    assert row["instance_points"] == ""
+    assert row["bbox_x_tl"] == "10.00"
+    assert row["bbox_y_br"] == "140.00"
+
+
+def test_write_and_read_roundtrip_with_template_extra(tmp_path: Path):
+    # template carries bookkeeping + an extra "cvat_url" column
+    columns = list(CVAT_CSV_COLUMNS) + ["cvat_url"]
+    meta = {
+        "image_id": "7",
+        "task_id": "3",
+        "task_name": "batch_3",
+        "task_assignee": "alice",
+        "image_path": "raw/frame.jpg",
+        "cvat_url": "https://cvat/tasks/3/jobs/9",
+    }
+    rows = _cvat_rows_for_image(
+        "frame.jpg", 320, 200, [[10, 20, 110, 140]], ["car"], meta=meta, columns=columns
+    )
+    out = tmp_path / "export.csv"
+    _write_cvat_csv(rows, out, columns)
+
+    header, read_rows = _read_cvat_csv(out)
+    assert "cvat_url" in header
+    assert len(read_rows) == 1
+    r = read_rows[0]
+    assert r["task_name"] == "batch_3"
+    assert r["task_assignee"] == "alice"
+    assert r["cvat_url"] == "https://cvat/tasks/3/jobs/9"
+    # per-detection field is set by us, not the template:
+    assert r["instance_label"] == "car"
+
+
+# ---------------------------------------------------------------------------
+# predictions_to_cvat_csv (fake model, no Ultralytics needed)
+# ---------------------------------------------------------------------------
+
+def test_predictions_to_cvat_csv_basic(tmp_path: Path):
+    images = tmp_path / "images"
+    _make_images(images, ["a.jpg", "b.jpg"])
+    out = tmp_path / "pred.csv"
+
+    n = predictions_to_cvat_csv(_FakeModel(), images, out)
+    assert n == 2  # one detection per image
+    header, rows = _read_cvat_csv(out)
+    assert header[: len(CVAT_CSV_COLUMNS)] == list(CVAT_CSV_COLUMNS)
+    assert {r["image_name"] for r in rows} == {"a.jpg", "b.jpg"}
+    assert all(r["instance_label"] == "car" for r in rows)  # class 0 via model.names
+    assert all(r["image_width"] == "320" and r["image_height"] == "200" for r in rows)
+
+
+def test_predictions_to_cvat_csv_joins_template(tmp_path: Path):
+    images = tmp_path / "images"
+    _make_images(images, ["a.jpg"])
+
+    template = tmp_path / "template.csv"
+    columns = list(CVAT_CSV_COLUMNS) + ["cvat_url"]
+    tmpl_row = {c: "" for c in columns}
+    tmpl_row.update(
+        {
+            "image_name": "a.jpg",
+            "task_name": "night_set",
+            "task_assignee": "bob",
+            "cvat_url": "https://cvat/jobs/42",
+        }
+    )
+    _write_cvat_csv([tmpl_row], template, columns)
+
+    out = tmp_path / "pred.csv"
+    predictions_to_cvat_csv(_FakeModel(), images, out, template_csv=template)
+
+    header, rows = _read_cvat_csv(out)
+    assert "cvat_url" in header
+    assert rows[0]["task_name"] == "night_set"
+    assert rows[0]["task_assignee"] == "bob"
+    assert rows[0]["cvat_url"] == "https://cvat/jobs/42"
+
+
+# ---------------------------------------------------------------------------
+# cvat_csv_gt
+# ---------------------------------------------------------------------------
+
+CSV_GT = """\
+image_name,image_id,job_id,image_width,image_height,instance_label,instance_shape,instance_points,bbox_x_tl,bbox_y_tl,bbox_x_br,bbox_y_br,task_id,task_name,task_assignee,image_path,cvat_url
+frame.jpg,1,9,320,200,car,rectangle,,10,20,110,140,3,batch,alice,raw/frame.jpg,https://cvat/9
+frame.jpg,1,9,320,200,person,rectangle,,0,0,40,80,3,batch,alice,raw/frame.jpg,https://cvat/9
+frame.jpg,1,9,320,200,tree,polygon,"5,5 8,9",0,0,0,0,3,batch,alice,raw/frame.jpg,https://cvat/9
+"""
+
+
+def test_cvat_csv_gt_parses_rectangles(tmp_path: Path):
+    csv = tmp_path / "gt.csv"
+    csv.write_text(CSV_GT, encoding="utf-8")
+    records = cvat_csv_gt(csv, class_names=["car", "person"])
+
+    assert set(records) == {"frame.jpg"}
+    rec = records["frame.jpg"]
+    assert rec["width"] == 320 and rec["height"] == 200
+    assert rec["image_path"] == "raw/frame.jpg"
+    # polygon row is dropped (rectangles only by default) → 2 boxes
+    assert len(rec["boxes"]) == 2
+    assert rec["class_ids"] == [0, 1]
+    assert rec["labels"] == ["car", "person"]
+    assert rec["boxes"][0] == [10.0, 20.0, 110.0, 140.0]
+    # meta retains the extra cvat link column for the viz layer
+    assert rec["meta"]["cvat_url"] == "https://cvat/9"
+
+
+# ---------------------------------------------------------------------------
+# round-trip: predictions_to_cvat_csv → cvat_csv_gt
+# ---------------------------------------------------------------------------
+
+def test_export_then_read_back_roundtrip(tmp_path: Path):
+    images = tmp_path / "images"
+    _make_images(images, ["a.jpg"])
+    out = tmp_path / "pred.csv"
+
+    predictions_to_cvat_csv(_FakeModel(), images, out, class_names=["car", "person"])
+    records = cvat_csv_gt(out, class_names=["car", "person"])
+
+    rec = records["a.jpg"]
+    assert rec["width"] == 320 and rec["height"] == 200
+    assert rec["labels"] == ["car"]
+    assert rec["class_ids"] == [0]
+    # the box the fake model emitted survives the write/parse round-trip
+    assert rec["boxes"][0] == [10.0, 20.0, 110.0, 140.0]

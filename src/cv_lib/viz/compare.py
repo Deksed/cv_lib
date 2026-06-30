@@ -122,6 +122,7 @@ def compare_gt_pred(
     class_names: list[str],
     conf_threshold: float = 0.25,
     label_path: str | Path | None = None,
+    csv_path: str | Path | None = None,
     output_path: str | Path | None = None,
     show: bool = True,
 ) -> np.ndarray:
@@ -129,11 +130,16 @@ def compare_gt_pred(
     Side-by-side comparison: left = GT, right = model predictions.
 
     Args:
-        image_path:     path to the image file
+        image_path:     path to the image file (or, with ``csv_path``, just the
+                        image name — the path is taken from the CSV's
+                        ``image_path`` column when the given path is missing)
         model_path:     path to a .pt Ultralytics model
         class_names:    ordered list of class names matching the label indices
         conf_threshold: minimum confidence to show a prediction
         label_path:     explicit path to .txt label; auto-resolved if None
+        csv_path:       CVAT CSV export to source GT boxes and the image path
+                        from (instead of the YOLO dataset); the matching row's
+                        path + any CVAT link column are printed
         output_path:    if set, saves the result image here
         show:           display with cv2.imshow (blocks until key press)
 
@@ -143,6 +149,18 @@ def compare_gt_pred(
     from ultralytics import YOLO  # imported lazily — not everyone installs it
 
     image_path = Path(image_path)
+
+    # When a CVAT CSV is given, it is the source of truth for the image path and
+    # the GT boxes (issue: compare straight from the export, not a YOLO dataset).
+    record = None
+    if csv_path is not None:
+        from cv_lib.data.convert import cvat_csv_gt
+
+        records = cvat_csv_gt(csv_path, class_names=class_names)
+        record = records.get(image_path.name) or records.get(image_path.stem)
+        if record and record.get("image_path") and not image_path.exists():
+            image_path = Path(record["image_path"])
+
     img = cv2.imread(str(image_path))
     if img is None:
         raise FileNotFoundError(f"Cannot read image: {image_path}")
@@ -150,8 +168,22 @@ def compare_gt_pred(
     h, w = img.shape[:2]
 
     # --- Ground truth ---
-    resolved_label = Path(label_path) if label_path else _resolve_label_path(image_path)
-    gt_boxes, gt_classes = load_yolo_gt(resolved_label, w, h)
+    if record is not None:
+        gt_boxes = (
+            np.asarray(record["boxes"], dtype=np.float32)
+            if record["boxes"]
+            else np.zeros((0, 4), dtype=np.float32)
+        )
+        gt_classes = np.asarray(record["class_ids"], dtype=np.int32)
+        meta = record.get("meta", {})
+        link = next(
+            (v for k, v in meta.items() if v and any(t in k.lower() for t in ("cvat", "url", "link"))),
+            "",
+        )
+        print(f"[compare] {image_path}" + (f"  cvat: {link}" if link else ""))
+    else:
+        resolved_label = Path(label_path) if label_path else _resolve_label_path(image_path)
+        gt_boxes, gt_classes = load_yolo_gt(resolved_label, w, h)
     gt_panel = _draw_boxes(img, gt_boxes, gt_classes, class_names)
     _add_panel_label(gt_panel, f"GT  ({len(gt_boxes)} boxes)")
 

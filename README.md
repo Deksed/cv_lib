@@ -114,6 +114,7 @@ from cv_lib import (
     class_distribution, data_root,
     inspect_dataset, InspectReport,
     cvat_xml_to_yolo, coco_json_to_yolo, cvat_csv_to_yolo, query_cvat_csv,
+    cvat_csv_gt, predictions_to_cvat_csv,
     # data — train/val/test split
     train_val_test_split, SplitReport,
     # data — DVC pipeline scaffolding
@@ -225,7 +226,7 @@ cvlib <command> --help
 | `cvlib crops` | вырезать объекты по боксам в `out/<class>/` (ревью / датасет под классификатор) |
 | `cvlib cvat-query` | поиск/фильтрация по CVAT CSV (label/task/assignee/image) |
 | `cvlib compare` | GT vs prediction side-by-side для одного изображения |
-| `cvlib infer`   | батч-инференс → YOLO-лейблы и/или аннотированные изображения (`--tiled` для крупных кадров) |
+| `cvlib infer`   | батч-инференс → YOLO-лейблы, аннотированные изображения и/или CVAT CSV (`--cvat-csv`, `--template`; `--tiled` для крупных кадров) |
 | `cvlib autolabel` | авто-предразметка модели → YOLO `.txt` черновики для CVAT |
 | `cvlib mine` | ранжирование неразмеченных по неуверенности (active-learning очередь) |
 | `cvlib train`   | обучение YOLO с сидами + снапшотом `train_config.json` |
@@ -491,6 +492,61 @@ from cv_lib.data.convert import cvat_xml_to_yolo, coco_json_to_yolo
 
 cvat_xml_to_yolo("annotations.xml", out_dir="labels/", class_names=["car", "person"])
 coco_json_to_yolo("instances_val.json", out_dir="labels/")
+```
+
+#### `predictions_to_cvat_csv()` — обратный путь: предсказания → CVAT CSV
+
+Прогоняет Ultralytics-модель по папке и пишет детекции в плоский CVAT CSV
+(`CVAT_CSV_COLUMNS`), готовый к заливке обратно в CVAT для ручной правки.
+**Только rectangle** (`instance_shape="rectangle"`, `instance_points` пуст).
+Служебные поля, которых нет у модели (`image_id`, `job_id`, `task_id`,
+`task_name`, `task_assignee`, `image_path` + любые доп. колонки вроде ссылки на
+CVAT), джойнятся из шаблонного CSV по `image_name`:
+
+```python
+from cv_lib.data.convert import predictions_to_cvat_csv
+
+n_rows = predictions_to_cvat_csv(
+    "best.pt",                       # путь к .pt или загруженный YOLO
+    images_dir="dataset/images/val",
+    out_csv="runs/preann/export.csv",
+    template_csv="cvat_template.csv",  # опц.: метаданные/ссылки по image_name
+    class_names=["car", "person"],   # иначе берётся из model.names
+    conf=0.25, imgsz=640,
+)
+# → export.csv: по строке на детекцию; кадры без детекций строк не дают
+```
+
+То же из CLI (переиспользует уже посчитанные детекции, без второго прохода):
+
+```bash
+cvlib infer --model best.pt --images dataset/images/val \
+    --cvat-csv runs/preann/export.csv --template cvat_template.csv
+```
+
+#### `cvat_csv_gt()` — GT для отрисовки прямо из CVAT CSV
+
+CVAT CSV как источник истины для путей и боксов (туда удобно класть ссылку на
+CVAT). Возвращает словарь `image_name → {image_path, width, height, boxes (xyxy),
+class_ids, labels, meta}`; `meta` — первая строка кадра со всеми колонками
+(включая ссылку на CVAT):
+
+```python
+from cv_lib.data.convert import cvat_csv_gt
+
+records = cvat_csv_gt("export.csv", class_names=["car", "person"])
+rec = records["frame_001.jpg"]
+print(rec["image_path"], rec["boxes"], rec["labels"])
+print(rec["meta"].get("cvat_url"))   # доп. колонка из CSV, если есть
+
+# compare_gt_pred берёт путь и GT из CSV, а не из YOLO-датасета:
+from cv_lib.viz import compare_gt_pred
+compare_gt_pred(
+    "frame_001.jpg",                 # имя; путь возьмётся из CSV, если файла нет рядом
+    model_path="best.pt",
+    class_names=["car", "person"],
+    csv_path="export.csv",           # GT + путь + печать ссылки на CVAT из строки
+)
 ```
 
 #### `train_val_test_split()`

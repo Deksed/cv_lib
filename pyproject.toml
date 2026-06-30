@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cv-lib"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.10,<3.13"  # 3.13 несовместим с cu118; снять при переходе на CUDA 12.4+
 description = "CV utility library for iterating on object detection models"
 dependencies = [

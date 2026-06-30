@@ -79,6 +79,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--save-labels", action="store_true", help="Save predictions as YOLO .txt files.")
     parser.add_argument("--save-vis", action="store_true", help="Save annotated images.")
     parser.add_argument(
+        "--cvat-csv", metavar="PATH",
+        help="Also write predictions as a CVAT CSV export (rectangles) at PATH.",
+    )
+    parser.add_argument(
+        "--template", metavar="CSV",
+        help="Template CVAT CSV: joins bookkeeping/link columns by image_name into --cvat-csv.",
+    )
+    parser.add_argument(
         "--imgsz", type=int, default=640,
         help="Inference image size (default: 640).",
     )
@@ -94,8 +102,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
-    if not args.save_labels and not args.save_vis:
-        raise SystemExit("Specify at least one of --save-labels or --save-vis.")
+    if not args.save_labels and not args.save_vis and not args.cvat_csv:
+        raise SystemExit("Specify at least one of --save-labels, --save-vis or --cvat-csv.")
 
     from ultralytics import YOLO
 
@@ -124,6 +132,15 @@ def run(args: argparse.Namespace) -> None:
         labels_dir.mkdir(parents=True, exist_ok=True)
     if args.save_vis:
         vis_dir.mkdir(parents=True, exist_ok=True)
+
+    cvat_rows: list[dict] = []
+    cvat_columns: list[str] = []
+    cvat_by_name: dict[str, dict] = {}
+    if args.cvat_csv:
+        from cv_lib.data.convert import CVAT_CSV_COLUMNS, _load_cvat_template
+
+        extra_cols, cvat_by_name = _load_cvat_template(args.template)
+        cvat_columns = list(CVAT_CSV_COLUMNS) + extra_cols
 
     predict_kwargs: dict = {
         "conf": args.conf,
@@ -160,6 +177,14 @@ def run(args: argparse.Namespace) -> None:
             else:
                 vis = _draw_predictions(img_bgr, boxes_xyxy, class_ids, confs, class_names)
                 cv2.imwrite(str(vis_dir / img_path.name), vis)
+        if args.cvat_csv and len(boxes_xyxy):
+            from cv_lib.data.convert import _cvat_rows_for_image
+
+            labels = [class_names[c] if c < len(class_names) else str(c) for c in class_ids]
+            meta = cvat_by_name.get(img_path.name, {})
+            cvat_rows.extend(
+                _cvat_rows_for_image(img_path.name, w, h, boxes_xyxy, labels, meta, cvat_columns)
+            )
 
     if args.tiled:
         from cv_lib.infer.tiled import sliced_predict
@@ -196,6 +221,12 @@ def run(args: argparse.Namespace) -> None:
             _save(img_path, boxes_xyxy, class_ids, confs, w, h)
             if (i + 1) % 50 == 0 or (i + 1) == n_total:
                 logger.info("{}/{} done", i + 1, n_total)
+
+    if args.cvat_csv:
+        from cv_lib.data.convert import _write_cvat_csv
+
+        _write_cvat_csv(cvat_rows, args.cvat_csv, cvat_columns)
+        logger.info("Wrote {} CVAT CSV rows → {}", len(cvat_rows), args.cvat_csv)
 
     logger.info("Done. {} images, {} total detections.", n_total, n_boxes)
     if args.save_labels:
