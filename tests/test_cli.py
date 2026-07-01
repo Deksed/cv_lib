@@ -33,6 +33,7 @@ def _minimal_args(name: str) -> list[str]:
         "compare-runs": ["compare-runs", "runs/exp1"],
         "dvc-init": ["dvc-init"],
         "split": ["split", "imgs/", "--out", "ds/"],
+        "csv-split": ["csv-split", "export.csv"],
         "distribution": ["distribution", "labels/"],
         "augment": ["augment", "img.jpg"],
         "remap": ["remap", "labels/", "--map", "1=0"],
