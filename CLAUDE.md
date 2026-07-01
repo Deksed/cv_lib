@@ -74,6 +74,42 @@ automatically (`python-dotenv`); copy `.env.example` → `.env`.
 Datasets follow **YOLO format** (`.yaml` + `images/` + `labels/`). CVAT exports are
 YOLO 1.1 XML, COCO JSON, or flat CVAT CSV — check the format before parsing.
 
+**Source format — we start from a flat CVAT CSV.** The original dataset is delivered
+as a single CSV that we then convert to YOLO. **Each row is one object (instance), and
+a single image can have many rows** — group by `image_id` / `image_name` to reconstruct
+all annotations for an image. Its columns are:
+
+| Column | Meaning |
+| --- | --- |
+| `image_name` | image file name |
+| `image_id` | image identifier |
+| `job_id` | CVAT job id |
+| `image_width` / `image_height` | image dimensions (px) |
+| `instance_lable` | class label of the instance (note: spelled `lable`) |
+| `instance_shape` | annotation geometry type (e.g. `rectangle`, `polygon`) |
+| `instance_points` | raw shape points (polygon/keypoint coords) |
+| `bbox_x_tl` / `bbox_y_tl` | bbox top-left corner (px) |
+| `bbox_x_br` / `bbox_y_br` | bbox bottom-right corner (px) |
+| `task_id` / `task_name` | CVAT task id / name |
+| `tasK-assignee` | task assignee (note the odd casing/hyphen) |
+| `image_path` | path to the image file |
+
+Preserve the header spellings exactly (`instance_lable`, `tasK-assignee`) — they
+come from upstream and are matched literally when parsing.
+
+**Splitting from the CSV** (`data/csv_split.py`, CLI `cvlib csv-split`) — three
+strategies over the *images* in the CSV; all share one greedy grouped-stratified
+engine (stdlib only, no pandas/sklearn), stratified by dominant class:
+- `random_split_csv` — each image independent (plain stratified split).
+- `temporal_split_csv` — frames within `--gap` of each other (by a `ts` column)
+  form a session that lands **whole** in one split → no near-duplicate leakage.
+- `camera_temporal_split_csv` — same, but sessionized **per camera** (`camera` +
+  `ts` columns) so identical timestamps on different cameras aren't merged.
+
+Output is **manifest/CSV only** (per-split `<split>.csv` + `split_manifest.csv`);
+it never copies image/label files — that stays with `train_val_test_split`
+(`data/split.py`), which splits an already-materialized YOLO dir.
+
 ## Device
 
 Always abstract the device — never raw `.cuda()`:

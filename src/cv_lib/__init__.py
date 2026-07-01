@@ -61,6 +61,11 @@ _EXPORTS: dict[str, str] = {
     # data.split
     "train_val_test_split": "cv_lib.data.split",
     "SplitReport": "cv_lib.data.split",
+    # data.csv_split
+    "random_split_csv": "cv_lib.data.csv_split",
+    "temporal_split_csv": "cv_lib.data.csv_split",
+    "camera_temporal_split_csv": "cv_lib.data.csv_split",
+    "CsvSplitReport": "cv_lib.data.csv_split",
     # data.merge
     "merge_datasets": "cv_lib.data.merge",
     "MergeReport": "cv_lib.data.merge",
@@ -146,6 +151,12 @@ if TYPE_CHECKING:
         yolo_to_voc,
     )
     from cv_lib.data.crops import CropReport, extract_crops  # noqa: F401
+    from cv_lib.data.csv_split import (  # noqa: F401
+        CsvSplitReport,
+        camera_temporal_split_csv,
+        random_split_csv,
+        temporal_split_csv,
+    )
     from cv_lib.data.dedup import check_split_leakage, find_duplicates  # noqa: F401
     from cv_lib.data.dvc_gen import (  # noqa: F401
         PipelineConfig,
