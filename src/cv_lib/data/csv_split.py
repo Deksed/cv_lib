@@ -27,6 +27,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from loguru import logger
+
 from cv_lib.data.convert import _read_cvat_csv, _write_cvat_csv
 
 SPLITS: tuple[str, ...] = ("train", "val", "test")
@@ -132,6 +134,10 @@ def _read_image_records(
         raw = row.get("image_name") or row.get("image_path")
         if not raw:
             continue
+        # Key by basename: image names are `camera_ts.<ext>` (camera encoded in
+        # the filename), so the basename is unique per camera and safe to group
+        # on. If a source ever reuses a bare filename across cameras, switch this
+        # to the `image_id` column.
         name = Path(raw).name
         rec = records.get(name)
         if rec is None:
@@ -175,6 +181,25 @@ def _sessionize(records: list[ImageRecord], gap: float) -> list[list[str]]:
         groups.append(current)
     groups.extend([r.name] for r in records if r.ts is None)
     return groups
+
+
+def _warn_missing_ts(records: list[ImageRecord], ts_column: str) -> None:
+    """Warn when frames lack a parseable ``ts`` — they become singleton groups,
+    so a temporal split silently degrades toward a random one."""
+    missing = sum(1 for r in records if r.ts is None)
+    if not missing:
+        return
+    if missing == len(records):
+        logger.warning(
+            "No parseable {!r} on any of {} image(s); temporal grouping is a no-op "
+            "(each frame is its own group — effectively a random split).",
+            ts_column, len(records),
+        )
+    elif missing / len(records) > 0.5:
+        logger.warning(
+            "{}/{} image(s) lack a parseable {!r}; those become singleton groups.",
+            missing, len(records), ts_column,
+        )
 
 
 def _groups_camera_temporal(records: list[ImageRecord], gap: float) -> list[list[str]]:
@@ -386,6 +411,7 @@ def temporal_split_csv(
     )
     if not records:
         raise ValueError(f"No images found in {csv_path}")
+    _warn_missing_ts(records, ts_column)
     groups = _sessionize(records, gap)
     return _finalize(
         records, groups, header, rows,
@@ -435,6 +461,7 @@ def camera_temporal_split_csv(
     )
     if not records:
         raise ValueError(f"No images found in {csv_path}")
+    _warn_missing_ts(records, ts_column)
     groups = _groups_camera_temporal(records, gap)
     return _finalize(
         records, groups, header, rows,

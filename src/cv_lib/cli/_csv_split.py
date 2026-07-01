@@ -54,8 +54,9 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Camera column for the camera method (default: camera).",
     )
     parser.add_argument(
-        "--gap", type=float, default=1.0, metavar="SECONDS",
-        help="Max ts spacing to keep frames in one session (default: 1.0).",
+        "--gap", type=float, default=1.0, metavar="GAP",
+        help="Max ts spacing (in the ts column's own unit) to keep frames in "
+             "one session (default: 1.0).",
     )
     parser.add_argument(
         "--label-column", metavar="COL",

@@ -171,6 +171,25 @@ def test_missing_ts_column_raises(tmp_path: Path):
         temporal_split_csv(tmp_path / "e.csv")
 
 
+def test_temporal_warns_when_ts_all_missing(tmp_path: Path):
+    from loguru import logger
+
+    columns = ["image_name", "instance_label", "ts"]
+    with open(tmp_path / "e.csv", "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        for i in range(10):
+            writer.writerow({"image_name": f"img_{i}.jpg", "instance_label": "cls0", "ts": ""})
+
+    messages: list[str] = []
+    sink = logger.add(messages.append, level="WARNING")
+    try:
+        temporal_split_csv(tmp_path / "e.csv", ratios=(0.5, 0.5), stratify=False)
+    finally:
+        logger.remove(sink)
+    assert any("no-op" in m for m in messages)
+
+
 def test_bad_ratios_raise(tmp_path: Path):
     csv_path = _make_csv(tmp_path / "e.csv", n=10)
     with pytest.raises(ValueError):
